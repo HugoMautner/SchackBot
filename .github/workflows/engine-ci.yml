@@ -2,11 +2,14 @@ name: Engine CI
 
 on:
   push:
+    branches: [ main ]
     paths:
       - 'engine/**'
+      - '.github/workflows/engine-ci.yml'
   pull_request:
     paths:
       - 'engine/**'
+  workflow_dispatch: {}
 
 jobs:
   test:
