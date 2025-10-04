@@ -18,6 +18,7 @@ MemoryCaptures/
 # IDEs
 .vscode/
 .idea/
+.vs/
 *.DotSettings.user
 
 # OS
