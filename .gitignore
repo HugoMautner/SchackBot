@@ -1,0 +1,40 @@
+# Build / temp
+[Bb]in/
+[Oo]bj/
+[Ll]ibrary/
+[Tt]emp/
+[Bb]uild/
+[Bb]uilds/
+Logs/
+UserSettings/
+MemoryCaptures/
+*.csproj.user
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+
+# IDEs
+.vscode/
+.idea/
+*.DotSettings.user
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Rider / VS cache
+.ReSharper*/
+*_Resharper.*/
+*.sln.iml
+
+# Unity generated
+*.unitypackage
+
+# Packages auto-generated lockfile OK to commit (helps determinism)
+# If you *don’t* want to commit it, uncomment:
+# Packages/packages-lock.json
+
+# Dotnet
+*.nupkg

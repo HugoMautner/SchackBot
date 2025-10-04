@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup>
+    <AnalysisLevel>latest-all</AnalysisLevel>
+    <Deterministic>true</Deterministic>
+    <WarningsAsErrors>true</WarningsAsErrors>
+    <CheckForOverflowUnderflow>true</CheckForOverflowUnderflow>
+  </PropertyGroup>
+</Project>
