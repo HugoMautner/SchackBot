@@ -1,0 +1,26 @@
+name: Engine CI
+
+on:
+  push:
+    paths:
+      - 'engine/**'
+  pull_request:
+    paths:
+      - 'engine/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      - name: Restore
+        run: dotnet restore engine/SchackBot.sln
+      - name: Build
+        run: dotnet build --configuration Release engine/SchackBot.sln
+      - name: Test
+        run: dotnet test --configuration Release --no-build engine/SchackBot.sln
