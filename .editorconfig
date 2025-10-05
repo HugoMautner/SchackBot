@@ -32,3 +32,8 @@ dotnet_diagnostic.CA1515.severity = suggestion # Types in test assemblies can be
 dotnet_analyzer_diagnostic.category-Style.severity = suggestion
 dotnet_analyzer_diagnostic.category-Design.severity = warning
 dotnet_analyzer_diagnostic.category-Usage.severity = warning
+
+# --- Test naming conventions -------------------------------------
+[*/tests/*.cs]
+# Allow underscores in test names (CA1707)
+dotnet_diagnostic.CA1707.severity = none
