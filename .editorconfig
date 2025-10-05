@@ -20,6 +20,7 @@ dotnet_style_qualification_for_property = true:suggestion
 dotnet_style_qualification_for_method = true:suggestion
 dotnet_style_qualification_for_event = true:suggestion
 dotnet_diagnostic.IDE0005.severity = warning   # Unused using
+dotnet_diagnostic.CA1510.severity = none
 
 # Analyzer tweaks (engine-focused)
 # We intentionally use byte-sized enums for packed representations.
@@ -33,7 +34,12 @@ dotnet_analyzer_diagnostic.category-Style.severity = suggestion
 dotnet_analyzer_diagnostic.category-Design.severity = warning
 dotnet_analyzer_diagnostic.category-Usage.severity = warning
 
-# --- Test naming conventions -------------------------------------
+# CA1304: Specify CultureInfo
+dotnet_diagnostic.CA1304.severity = none
+
+# CA1307: Specify StringComparison for clarity
+dotnet_diagnostic.CA1307.severity = none
+
 [**/tests/**/*.cs]
 # Allow underscores in test names (CA1707)
 dotnet_diagnostic.CA1707.severity = none
