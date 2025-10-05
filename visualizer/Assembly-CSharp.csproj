@@ -65,6 +65,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Assets/Scripts/UnityLayer/HelloEngine.cs" />
+    <Compile Include="Assets/Scripts/UnityLayer/GenGrid.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="UnityEngine">
