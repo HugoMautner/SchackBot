@@ -19,16 +19,21 @@ public class PositionView2D : MonoBehaviour
     public Sprite[] blackSprites = new Sprite[7];
 
     [Header("Layout")]
-    public float yLift = 0.02f;   // lift above tiles slightly
+    [Tooltip("Rest height of pieces relative to the Board's transform Y.")]
+    public float yLift = 0.02f;                     // slight lift above tiles
     [Range(0.5f, 1.1f)]
-    public float fill = 0.92f;    // fraction of a tile to occupy; 1 = edge-to-edge
-    public float tileSize = 1f;   // your tiles are 1 unit; keep unless you change GenGrid
+    public float fill = 0.92f;                      // fraction of a tile; 1 = edge-to-edge
+    [Tooltip("World size of one tile. Should match GenGrid.")]
+    public float tileSize = 1f;
+    [Tooltip("If false, board mapping is mirrored for black-at-bottom viewing.")]
+    public bool whiteAtBottom = true;
 
     private Transform piecesRoot; // all spawned pieces live here
 
     void OnEnable()
     {
         EnsurePiecesRoot();
+        ConfigureBoardMapping(); // << important: keeps BoardCoord aligned
         Rebuild();
     }
 
@@ -39,6 +44,7 @@ public class PositionView2D : MonoBehaviour
         {
             if (this == null) return;
             EnsurePiecesRoot();
+            ConfigureBoardMapping();
             Rebuild();
         };
     }
@@ -77,15 +83,6 @@ public class PositionView2D : MonoBehaviour
             var go = (GameObject)PrefabInstantiate(piece2DPrefab, piecesRoot);
             go.name = $"{color}_{type}_{square}";
 
-            // --- Position root at square center (root stays unscaled, rotation=identity) ---
-            int file = square & 7;
-            int rank = square >> 3;
-            go.transform.localPosition = new Vector3((file - 3.5f) * tileSize,
-                                                     yLift,
-                                                     (rank - 3.5f) * tileSize);
-            go.transform.localRotation = Quaternion.identity;
-            go.transform.localScale = Vector3.one;
-
             // --- SpriteRenderer lives on the child (Visual) ---
             var sr = go.GetComponentInChildren<SpriteRenderer>(true);
             if (sr != null)
@@ -117,10 +114,36 @@ public class PositionView2D : MonoBehaviour
                 col.center = Vector3.zero;
                 col.size = new Vector3(tileSize * 0.95f, 0.05f, tileSize * 0.95f);
             }
+
+            // Set engine square on the MovablePiece
+            var mp = go.GetComponent<MovablePiece>();
+            if (mp != null)
+            {
+                // Let MovablePiece place the transform using BoardCoord.SquareToWorld
+                mp.SetSquare(square);
+            }
+            else
+            {
+                // Fallback: place via BoardCoord directly (still centered & consistent)
+                go.transform.position = BoardCoord.SquareToWorld(square);
+            }
         }
     }
 
     // --- helpers ---
+
+    private void ConfigureBoardMapping()
+    {
+        // We treat this GameObject's transform as the board CENTER.
+        // Bottom-left *corner* of the board in LOCAL space is (-4*tile, 0, -4*tile).
+        Vector3 localBottomLeft = new Vector3(-4f * tileSize, 0f, -4f * tileSize);
+
+        // Convert to WORLD space and set the rest height (Origin.y) to transform.y + yLift.
+        Vector3 originWorld = transform.TransformPoint(localBottomLeft);
+        originWorld.y = transform.position.y + yLift;
+
+        BoardCoord.Configure(originWorld, tileSize, whiteAtBottom);
+    }
 
     private void AutoFitToTile(Transform visual, SpriteRenderer sr, float tileWorldSize, float fillFrac)
     {
