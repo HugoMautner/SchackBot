@@ -1,7 +1,6 @@
 using UnityEngine;
 
 [DisallowMultipleComponent]
-[RequireComponent(typeof(Collider))]
 public class MovablePiece : MonoBehaviour
 {
     public int Square { get; private set; } = -1;
@@ -11,15 +10,12 @@ public class MovablePiece : MonoBehaviour
 
     [Header("Drag")]
     [SerializeField] float dragLift = 0.02f;
-    [SerializeField] bool disableColliderWhileDragging = true;
 
     private Vector3 _restWorld;
     private bool _dragging;
-    private Collider _col;
 
     void Awake()
     {
-        _col = GetComponent<Collider>();
         if (visual == null)
         {
             Transform t = transform.Find("Visual");
@@ -45,8 +41,6 @@ public class MovablePiece : MonoBehaviour
         if (_dragging) { return; }
         _dragging = true;
 
-        if (disableColliderWhileDragging && _col) { _col.enabled = false; }
-
         // Lift slightly above the board plane to avoid z-fighting while dragging.
         float liftedY = BoardCoord.Origin.y + dragLift;
 
@@ -66,8 +60,6 @@ public class MovablePiece : MonoBehaviour
     {
         if (!_dragging) return;
         _dragging = false;
-
-        if (disableColliderWhileDragging && _col) _col.enabled = true;
 
         // Snap back to the last committed square. If a move is accepted,
         // the controller will immediately call SetSquare(toSquare) afterward.

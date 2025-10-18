@@ -121,6 +121,10 @@ public class PositionView2D : MonoBehaviour
             {
                 // Let MovablePiece place the transform using BoardCoord.SquareToWorld
                 mp.SetSquare(square);
+
+                // Add the piece to the registry
+                BoardPieceRegistry reg = GetComponentInParent<BoardPieceRegistry>();
+                if (reg) { reg.Register(mp, square); }
             }
             else
             {
