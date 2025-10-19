@@ -107,19 +107,10 @@ public class PositionView2D : MonoBehaviour
                 AutoFitToTile(visual, sr, tileSize, fill);
             }
 
-            // --- Keep collider on root sized to the tile (and thin in Y) ---
-            var col = go.GetComponent<BoxCollider>();
-            if (col != null)
-            {
-                col.center = Vector3.zero;
-                col.size = new Vector3(tileSize * 0.95f, 0.05f, tileSize * 0.95f);
-            }
-
-            // Set engine square on the MovablePiece
+            // Set engine/view square on the MovablePiece and register it
             var mp = go.GetComponent<MovablePiece>();
             if (mp != null)
             {
-                // Let MovablePiece place the transform using BoardCoord.SquareToWorld
                 mp.SetSquare(square);
 
                 // Add the piece to the registry

@@ -56,14 +56,14 @@ public class MovablePiece : MonoBehaviour
         transform.position = new Vector3(worldPoint.x, liftedY, worldPoint.z);
     }
 
-    public void EndDrag()
+    public void EndDrag(bool snapBack = true)
     {
         if (!_dragging) return;
         _dragging = false;
 
         // Snap back to the last committed square. If a move is accepted,
         // the controller will immediately call SetSquare(toSquare) afterward.
-        if (Square >= 0)
+        if (snapBack)
         {
             transform.position = _restWorld;
         }

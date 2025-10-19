@@ -67,7 +67,6 @@
     <Compile Include="Assets/Scripts/UnityLayer/BoardHighlights.cs" />
     <Compile Include="Assets/Scripts/UnityLayer/BoardPieceRegistry.cs" />
     <Compile Include="Assets/Scripts/UnityLayer/MovablePiece.cs" />
-    <Compile Include="Assets/Scripts/UnityLayer/HelloEngine.cs" />
     <Compile Include="Assets/Scripts/UnityLayer/GenGrid.cs" />
     <Compile Include="Assets/Scripts/UnityLayer/BoardCoord.cs" />
     <Compile Include="Assets/Scripts/UnityLayer/PositionView2D.cs" />

@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 [DisallowMultipleComponent]
@@ -5,262 +6,356 @@ public class InteractionController : MonoBehaviour
 {
     [Header("References")]
     [SerializeField] private Camera cam;
-    [SerializeField] private LayerMask pieceMask = ~0;
     [SerializeField] private BoardHighlights highlights;
     [SerializeField] private BoardPieceRegistry registry;
 
     [Header("Cursor")]
     [SerializeField] private Texture2D openHandCursor;
     [SerializeField] private Texture2D grabbingHandCursor;
-    [SerializeField] private Vector2 openHandHotspot = new(8, 2);
-    [SerializeField] private Vector2 grabbingHandHotspot = new(10, 6);
+    [SerializeField] private Vector2 openHandHotspot = new Vector2(8, 2);
+    [SerializeField] private Vector2 grabbingHandHotspot = new Vector2(10, 6);
 
-    [Header("Look & Feel")]
+    [Header("UX")]
     [SerializeField] private float dragThresholdPixels = 6f;
     [SerializeField] private float clickSelectLift = 0.01f; // selection lift
     [SerializeField] private float dragLiftOffset = 0.02f;  // drag lift
     [SerializeField] private float animDuration = 0.12f;    // click-to-move animation duration
+    [SerializeField] private bool showDestinationHighlight = true; // drives the ring
 
-    private MovablePiece _active;     // dragging
-    private MovablePiece _selected;   // click-to-move
-    private MovablePiece _pressPiece; // press candidate
-    private int _fromSquare = -1;
-    private int _selectedFromSquare = -1;
+    private MovablePiece _activePiece;         // piece currently being dragged
+    private MovablePiece _selectedPiece;       // piece selected for click-to-move
+    private MovablePiece _pressCandidatePiece; // piece under initial press (before drag threshold)
+    private int _dragFromSquareIndex = -1;     // from-square for current drag
+    private int _selectedFromSquareIndex = -1; // from-square when a piece is selected for click-to-move
     private Vector2 _mouseDownScreen;
-    private Vector3 _lastWorldOnBoard;
+    private Vector3 _lastWorldPointOnBoard;
 
     private enum CursorState { Arrow, Open, Grab }
     private CursorState _cursorState = CursorState.Arrow;
 
-    void Awake()
+    private void Awake()
     {
-        if (!cam) cam = Camera.main;
-        if (!highlights) highlights = FindObjectOfType<BoardHighlights>();
-        if (!registry) registry = FindAnyObjectByType<BoardPieceRegistry>();
+        if (cam == null) { cam = Camera.main; }
+        if (highlights == null) { highlights = FindObjectOfType<BoardHighlights>(); }
+        if (registry == null) { registry = FindAnyObjectByType<BoardPieceRegistry>(); }
     }
 
-    void Update()
+    private void Update()
     {
-        if (!cam) return;
-        var ray = cam.ScreenPointToRay(Input.mousePosition);
+        if (cam == null) { return; }
 
-        // Cursor state logic
+        Ray mouseRay = cam.ScreenPointToRay(Input.mousePosition);
+
+        // --- Cursor state (square-driven) ---
         bool isOverOccupiedSquare = false;
-        if (BoardCoord.TryRayToBoard(ray, out Vector3 worldPointOnBoard))
+        if (BoardCoord.TryRayToBoard(mouseRay, out Vector3 worldPointOnBoardForCursor))
         {
-            if (BoardCoord.TryWorldToSquare(worldPointOnBoard, out int hoveredSquareIndex))
+            if (BoardCoord.TryWorldToSquare(worldPointOnBoardForCursor, out int hoveredSquareIndex))
             {
-                isOverOccupiedSquare = registry.GetAt(hoveredSquareIndex) != null;
+                isOverOccupiedSquare = registry != null && registry.GetAt(hoveredSquareIndex) != null;
             }
         }
-        bool grabbing =
-            (_active != null) ||
-            (_pressPiece != null && Input.GetMouseButton(0));
+
+        bool isGrabbing =
+            (_activePiece != null) ||
+            (_pressCandidatePiece != null && Input.GetMouseButton(0));
 
         if (!isOverOccupiedSquare) { SetCursorState(CursorState.Arrow); }
-        else if (grabbing) { SetCursorState(CursorState.Grab); }
+        else if (isGrabbing) { SetCursorState(CursorState.Grab); }
         else { SetCursorState(CursorState.Open); }
 
-
-        // Mouse down: record a press
+        // --- Mouse down: select immediately (snap to cursor) or prepare for drag ---
         if (Input.GetMouseButtonDown(0))
         {
-            _pressPiece = null;
+            _pressCandidatePiece = null;
             _mouseDownScreen = (Vector2)Input.mousePosition;
 
-            if (Physics.Raycast(ray, out var hit, 100f, pieceMask))
+            if (BoardCoord.TryRayToBoard(mouseRay, out Vector3 pressWorldPointOnBoard) &&
+                BoardCoord.TryWorldToSquare(pressWorldPointOnBoard, out int pressedSquareIndex))
             {
-                var mp = hit.collider.GetComponentInParent<MovablePiece>();
-                if (mp != null)
+                MovablePiece pieceAtPressedSquare = registry != null ? registry.GetAt(pressedSquareIndex) : null;
+                if (pieceAtPressedSquare != null)
                 {
-                    _pressPiece = mp;
-                    _fromSquare = mp.Square;
-                }
-            }
+                    // Select this piece right away
+                    SetSelected(pieceAtPressedSquare);
+                    _pressCandidatePiece = pieceAtPressedSquare;
+                    _dragFromSquareIndex = pieceAtPressedSquare.Square;
 
-            // Fallback to arrow cursor
-            if (_pressPiece == null)
-            {
-                if (BoardCoord.TryRayToBoard(ray, out Vector3 pressWorldPointOnBoard))
-                {
-                    if (BoardCoord.TryWorldToSquare(pressWorldPointOnBoard, out int pressedSquareIndex))
+                    // Snap to cursor center on impact (lifted)
+                    _pressCandidatePiece.transform.position = new Vector3(
+                        pressWorldPointOnBoard.x,
+                        BoardCoord.Origin.y + clickSelectLift,
+                        pressWorldPointOnBoard.z
+                    );
+
+                    // Ensure start-square tint is visible even before drag
+                    if (highlights != null)
                     {
-                        MovablePiece pieceAtPressedSquare = registry.GetAt(pressedSquareIndex);
-                        if (pieceAtPressedSquare != null)
-                        {
-                            _pressPiece = pieceAtPressedSquare;
-                            _fromSquare = pieceAtPressedSquare.Square;
-                        }
+                        highlights.SetSelection(_dragFromSquareIndex);
                     }
                 }
             }
         }
 
-        // Promote to drag when threshold crossed
-        if (_pressPiece != null && _active == null)
+        // --- Promote press -> drag once threshold crossed ---
+        if (_pressCandidatePiece != null && _activePiece == null)
         {
-            float moved = Vector2.Distance(_mouseDownScreen, (Vector2)Input.mousePosition);
-            if (moved >= dragThresholdPixels && BoardCoord.TryRayToBoard(ray, out var world))
+            float movedPixels = Vector2.Distance(_mouseDownScreen, (Vector2)Input.mousePosition);
+            if (movedPixels >= dragThresholdPixels &&
+                BoardCoord.TryRayToBoard(mouseRay, out Vector3 worldPointOnBoardForDrag))
             {
-                _lastWorldOnBoard = world;
-                _active = _pressPiece;
-                _active.BeginDrag(new Vector3(world.x, BoardCoord.Origin.y + dragLiftOffset, world.z));
-                _pressPiece = null;
+                _lastWorldPointOnBoard = worldPointOnBoardForDrag;
+                _activePiece = _pressCandidatePiece;
+
+                // Begin drag from current cursor position (already snapped on mousedown)
+                Vector3 lifted = new Vector3(
+                    worldPointOnBoardForDrag.x,
+                    BoardCoord.Origin.y + dragLiftOffset,
+                    worldPointOnBoardForDrag.z
+                );
+                _activePiece.BeginDrag(lifted);
+
+                _pressCandidatePiece = null;
             }
         }
 
-        // Drag update
-        if (_active != null)
+        // --- Drag update ---
+        if (_activePiece != null)
         {
-            if (BoardCoord.TryRayToBoard(ray, out var world))
+            if (BoardCoord.TryRayToBoard(mouseRay, out Vector3 worldPointOnBoardDuringDrag))
             {
-                _lastWorldOnBoard = world;
-                _active.UpdateDrag(new Vector3(world.x, BoardCoord.Origin.y + dragLiftOffset, world.z));
+                _lastWorldPointOnBoard = worldPointOnBoardDuringDrag;
 
-                if (BoardCoord.TryWorldToSquare(world, out int dsq))
-                    highlights?.SetDestination(dsq);
-            }
+                Vector3 lifted = new Vector3(
+                    worldPointOnBoardDuringDrag.x,
+                    BoardCoord.Origin.y + dragLiftOffset,
+                    worldPointOnBoardDuringDrag.z
+                );
+                _activePiece.UpdateDrag(lifted);
 
-            // End drag
-            if (Input.GetMouseButtonUp(0))
-            {
-                _active.EndDrag();
-
-                if (BoardCoord.TryWorldToSquare(_lastWorldOnBoard, out int toSquare))
+                if (BoardCoord.TryWorldToSquare(worldPointOnBoardDuringDrag, out int destinationSquareIndexDuringDrag))
                 {
-                    CommitVisual(_active, toSquare);
-                    highlights?.SetLastMove(_fromSquare, toSquare);
-                }
-
-                highlights?.SetDestination(null);
-                _active = null;
-                _fromSquare = -1;
-                return;
-            }
-        }
-
-        // Click-to-move path (no active drag)
-        if (Input.GetMouseButtonUp(0) && _active == null)
-        {
-            if (!BoardCoord.TryRayToBoard(ray, out var worldUp) ||
-                !BoardCoord.TryWorldToSquare(worldUp, out int squareUp))
-            {
-                _pressPiece = null;
-                return;
-            }
-
-            if (_selected != null)
-            {
-                // Clicking same piece = deselect; else move to hovered square.
-                if (_pressPiece == _selected)
-                {
-                    SetSelected(null);
+                    if (highlights != null)
+                    {
+                        highlights.SetDestination(showDestinationHighlight ? destinationSquareIndexDuringDrag : (int?)null);
+                    }
                 }
                 else
                 {
-                    CommitVisual(_selected, squareUp);
-                    if (_selectedFromSquare >= 0) highlights?.SetLastMove(_selectedFromSquare, squareUp);
-                    SetSelected(null);
+                    if (highlights != null)
+                    {
+                        highlights.SetDestination(null);
+                    }
+                }
+            }
+
+            // --- End drag ---
+            if (Input.GetMouseButtonUp(0))
+            {
+                if (BoardCoord.TryWorldToSquare(_lastWorldPointOnBoard, out int toSquareIndex))
+                {
+                    _activePiece.EndDrag(snapBack: false);
+                    CommitInstant(_activePiece, _dragFromSquareIndex, toSquareIndex);
+
+                    if (highlights != null)
+                    {
+                        highlights.SetLastMove(_dragFromSquareIndex, toSquareIndex);
+                    }
+                }
+                else
+                {
+                    _activePiece.EndDrag(snapBack: true);
                 }
 
-                _pressPiece = null;
+                // Clear transient visuals on drag end
+                if (highlights != null)
+                {
+                    highlights.SetDestination(null);
+                    highlights.SetSelection(null);
+                }
+
+                _activePiece = null;
+                _dragFromSquareIndex = -1;
+                return;
+            }
+        }
+
+        // --- Mouse up without drag: click-to-move flow ---
+        if (Input.GetMouseButtonUp(0) && _activePiece == null)
+        {
+            if (!BoardCoord.TryRayToBoard(mouseRay, out Vector3 releaseWorldPointOnBoard) ||
+                !BoardCoord.TryWorldToSquare(releaseWorldPointOnBoard, out int releaseSquareIndex))
+            {
+                _pressCandidatePiece = null;
                 return;
             }
 
-            // No selection → click on a piece selects it (and snaps to cursor center)
-            if (_pressPiece != null)
+            if (_selectedPiece != null)
             {
-                SetSelected(_pressPiece);
-                // Snap-on-impact to cursor center, slight lift for feedback
-                _pressPiece.transform.position = new Vector3(
-                    worldUp.x, BoardCoord.Origin.y + clickSelectLift, worldUp.z);
+                // Released on the same square as selection: snap back to square center, stay selected
+                if (releaseSquareIndex == _selectedFromSquareIndex)
+                {
+                    SnapPieceToSquareCenter(_selectedPiece, clickSelectLift);
+                    _pressCandidatePiece = null;
+                    return;
+                }
+
+                // Otherwise: animated move to the release square
+                if (_selectedFromSquareIndex >= 0)
+                {
+                    CommitAnimated(_selectedPiece, _selectedFromSquareIndex, releaseSquareIndex);
+                    if (highlights != null)
+                    {
+                        highlights.SetLastMove(_selectedFromSquareIndex, releaseSquareIndex);
+                    }
+                    SetSelected(null); // end selection after committing
+                }
+
+                _pressCandidatePiece = null;
+                return;
             }
 
-            _pressPiece = null;
+            _pressCandidatePiece = null;
         }
 
-        // While selected and not dragging: show destination preview under cursor
-        if (_selected != null &&
-            BoardCoord.TryRayToBoard(ray, out var dw) &&
-            BoardCoord.TryWorldToSquare(dw, out int dSq))
+        // --- While selected and not dragging: optional ring preview under cursor ---
+        if (_selectedPiece != null &&
+            BoardCoord.TryRayToBoard(mouseRay, out Vector3 worldPointOnBoardForPreview) &&
+            BoardCoord.TryWorldToSquare(worldPointOnBoardForPreview, out int previewSquareIndex) &&
+            highlights != null)
         {
-            highlights?.SetDestination(dSq);
+            highlights.SetDestination(showDestinationHighlight ? previewSquareIndex : (int?)null);
+        }
+
+        // If destination preview is disabled globally, scrub it.
+        if (!showDestinationHighlight && highlights != null)
+        {
+            highlights.SetDestination(null);
         }
     }
 
-    // ---------- helpers ----------
+    // ----------------- helpers -----------------
 
-    private void SetSelected(MovablePiece mp)
+    private void SetSelected(MovablePiece piece)
     {
-        // Un-highlight previous
-        if (_selected != null)
+        if (_selectedPiece != null)
         {
-            var p = _selected.transform.position;
-            _selected.transform.position = new Vector3(p.x, BoardCoord.Origin.y, p.z);
+            // Drop height on previous
+            Vector3 p = _selectedPiece.transform.position;
+            _selectedPiece.transform.position = new Vector3(p.x, BoardCoord.Origin.y, p.z);
         }
 
-        _selected = mp;
-        _selectedFromSquare = mp ? mp.Square : -1;
-        highlights?.SetSelection(mp ? mp.Square : (int?)null);
+        _selectedPiece = piece;
+        _selectedFromSquareIndex = piece != null ? piece.Square : -1;
 
-        if (_selected != null)
+        if (highlights != null)
         {
-            var p = _selected.transform.position;
-            _selected.transform.position = new Vector3(p.x, BoardCoord.Origin.y + clickSelectLift, p.z);
+            highlights.SetSelection(piece != null ? (int?)piece.Square : null);
+            highlights.ClearDots(); // reserved for future legal-move dots
         }
 
-        highlights?.ClearDots(); // reserve for future legal dots
+        if (_selectedPiece != null)
+        {
+            // Keep it lifted while selected (position may be overridden by caller)
+            Vector3 p = _selectedPiece.transform.position;
+            _selectedPiece.transform.position = new Vector3(p.x, BoardCoord.Origin.y + clickSelectLift, p.z);
+        }
     }
 
-    private void CommitVisual(MovablePiece piece, int toSquare)
+    private static void SnapPieceToSquareCenter(MovablePiece piece, float liftY)
     {
-        // Simple capture prevention
-        var occupant = registry.GetAt(toSquare);
+        Vector3 center = BoardCoord.SquareToWorld(piece.Square);
+        piece.transform.position = new Vector3(center.x, BoardCoord.Origin.y + liftY, center.z);
+    }
+
+    private void CommitInstant(MovablePiece piece, int fromSquareIndex, int toSquareIndex)
+    {
+        if (registry == null || piece == null) { return; }
+        if (fromSquareIndex == toSquareIndex) { return; }
+
+        MovablePiece occupant = registry.GetAt(toSquareIndex);
         if (occupant != null && occupant != piece)
         {
-            registry.RemoveAt(toSquare);
-            var go = occupant.gameObject;
-            if (Application.isPlaying) Destroy(go); else DestroyImmediate(go);
+            registry.RemoveAt(toSquareIndex);
+            GameObject go = occupant.gameObject;
+            if (Application.isPlaying) { Destroy(go); } else { DestroyImmediate(go); }
+        }
+
+        piece.SetSquare(toSquareIndex);
+        registry.Move(fromSquareIndex, toSquareIndex);
+    }
+
+    private void CommitAnimated(MovablePiece piece, int fromSquareIndex, int toSquareIndex)
+    {
+        if (registry == null || piece == null) { return; }
+        if (fromSquareIndex == toSquareIndex) { return; }
+
+        MovablePiece occupant = registry.GetAt(toSquareIndex);
+        if (occupant != null && occupant != piece)
+        {
+            registry.RemoveAt(toSquareIndex);
+            GameObject go = occupant.gameObject;
+            if (Application.isPlaying) { Destroy(go); } else { DestroyImmediate(go); }
         }
 
         StopAllCoroutines();
-        StartCoroutine(AnimateMove(piece, toSquare, animDuration));
+        StartCoroutine(AnimateMove(piece, fromSquareIndex, toSquareIndex, animDuration));
     }
 
-    private System.Collections.IEnumerator AnimateMove(MovablePiece piece, int toSquare, float dur)
+    private IEnumerator AnimateMove(MovablePiece piece, int fromSquareIndex, int toSquareIndex, float durationSeconds)
     {
         Vector3 start = piece.transform.position;
-        Vector3 end = BoardCoord.SquareToWorld(toSquare);
+        Vector3 end = BoardCoord.SquareToWorld(toSquareIndex);
+
         float t = 0f;
         while (t < 1f)
         {
-            t += Time.deltaTime / dur;
-            float s = 1f - Mathf.Pow(1f - Mathf.Clamp01(t), 3f); // cubic ease-out
-            piece.transform.position = Vector3.LerpUnclamped(start, end, s);
+            t += Time.deltaTime / Mathf.Max(0.0001f, durationSeconds);
+            float eased = 1f - Mathf.Pow(1f - Mathf.Clamp01(t), 3f); // cubic ease-out
+            piece.transform.position = Vector3.LerpUnclamped(start, end, eased);
             yield return null;
         }
-        piece.SetSquare(toSquare); // lock to exact center
-        registry.Move(_fromSquare, toSquare);
-        highlights?.SetDestination(null);
-        highlights?.SetSelection(null);
+
+        piece.SetSquare(toSquareIndex);
+        registry.Move(fromSquareIndex, toSquareIndex);
+
+        if (highlights != null)
+        {
+            highlights.SetDestination(null);
+            highlights.SetSelection(null);
+        }
     }
 
-    private void SetCursorState(CursorState s)
+    private void SetCursorState(CursorState newState)
     {
-        if (_cursorState == s) return;
-        _cursorState = s;
+        if (_cursorState == newState) { return; }
+        _cursorState = newState;
 
-        switch (s)
+        switch (newState)
         {
             case CursorState.Open:
-                if (openHandCursor) { Cursor.SetCursor(openHandCursor, openHandHotspot, CursorMode.Auto); break; }
-                goto default;
+                {
+                    if (openHandCursor != null)
+                    {
+                        Cursor.SetCursor(openHandCursor, openHandHotspot, CursorMode.Auto);
+                        break;
+                    }
+                    goto default;
+                }
             case CursorState.Grab:
-                if (grabbingHandCursor) { Cursor.SetCursor(grabbingHandCursor, grabbingHandHotspot, CursorMode.Auto); break; }
-                goto default;
+                {
+                    if (grabbingHandCursor != null)
+                    {
+                        Cursor.SetCursor(grabbingHandCursor, grabbingHandHotspot, CursorMode.Auto);
+                        break;
+                    }
+                    goto default;
+                }
             default:
-                Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
-                break;
+                {
+                    Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
+                    break;
+                }
         }
     }
 }
