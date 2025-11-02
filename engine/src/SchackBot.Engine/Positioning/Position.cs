@@ -10,6 +10,7 @@ public sealed class Position
 {
     private readonly BoardArray board = new();
     public Color SideToMove { get; private set; } = Color.White;
+    public Color OpponentColor { get; private set; }
     public int EnPassantSquare { get; private set; } = -1;
     public int HalfmoveClock { get; private set; }
     public int FullmoveNumber { get; private set; }
@@ -53,6 +54,7 @@ public sealed class Position
             this.board.Set(sq, info.Squares[sq]);
         }
         this.SideToMove = info.SideToMove;
+        this.OpponentColor = this.SideToMove == Color.White ? Color.Black : Color.White;
         this.EnPassantSquare = info.EnPassantSquare;
         this.HalfmoveClock = info.HalfmoveClock;
         this.FullmoveNumber = info.FullmoveNumber;

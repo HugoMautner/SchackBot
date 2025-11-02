@@ -14,7 +14,7 @@ public class MoveGenerator
     Position _position;
 
     Color _friendlyColor;
-    Color _enemyColor;
+    Color _opponentColor;
     int _currMoveIndex;
 
     public Span<Move> GenerateMoves(Position position, bool capturesOnly = false)
@@ -31,6 +31,8 @@ public class MoveGenerator
         _position = position;
         _generateQuietMoves = !capturesOnly;
 
+        Init();
+
         for (int startSquare = 0; startSquare < 64; startSquare++)
         {
             byte piece = _position.GetPieceAt(startSquare);
@@ -43,6 +45,12 @@ public class MoveGenerator
 
         moves = moves.Slice(0, _currMoveIndex);
         return moves.Length;
+    }
+
+    private void Init()
+    {
+        _friendlyColor = _position.SideToMove;
+        _opponentColor = _position.OpponentColor;
     }
 
     void GenerateSlidingMoves(Span<Move> moves, int startSquare, byte piece)
@@ -61,7 +69,7 @@ public class MoveGenerator
 
                 moves[_currMoveIndex++] = new Move(startSquare, targetSquare);
 
-                if (Piece.ColorOf(pieceOnTargetSquare) == _enemyColor) break;
+                if (Piece.ColorOf(pieceOnTargetSquare) == _opponentColor) break;
             }
         }
     }
