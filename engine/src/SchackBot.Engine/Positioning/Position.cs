@@ -2,13 +2,15 @@
 using System;
 using System.Collections.Generic;
 using SchackBot.Engine.Core;
+using SchackBot.Engine.MoveGeneration;
 using SchackBot.Engine.Positioning.Internal;
+
+using static SchackBot.Engine.Core.ColorExtensions;
 
 namespace SchackBot.Engine.Positioning;
 
 public sealed class Position
 {
-    private readonly BoardArray board = new();
     public Color SideToMove { get; private set; } = Color.White;
     public Color OpponentColor { get; private set; }
     public int EnPassantSquare { get; private set; } = -1;
@@ -21,7 +23,26 @@ public sealed class Position
     public bool BlackCanCastleKingside => (CastlingRights & 0b0100) != 0;
     public bool BlackCanCastleQueenside => (CastlingRights & 0b1000) != 0;
 
-    private Position() { }
+    // Instance data
+    private struct Undo
+    {
+        public int From;
+        public int To;
+        public byte MovedPiece;
+        public byte CapturedPiece;
+        public Color PrevSideToMove;
+        public int PrevEnPassantSquare;
+        public int PrevHalfMoveClock;
+        public int PrevFullMoveNumber;
+        public int PrevCastlingRights;
+    }
+    private readonly BoardArray _board = new();
+    private readonly Stack<Undo> _history = new();
+
+    private Position()
+    {
+        this.OpponentColor = OtherColor(SideToMove);
+    }
 
     public static Position Start()
     {
@@ -38,9 +59,93 @@ public sealed class Position
         return pos;
     }
 
-    public byte GetPieceAt(int square) => this.board.Get(square);
+    public byte GetPieceAt(int square) => this._board.Get(square);
 
-    public IEnumerable<(int square, byte piece)> EnumeratePieces() => this.board.Enumerate();
+    public IEnumerable<(int square, byte piece)> EnumeratePieces() => this._board.Enumerate();
+
+    public void MakeMove(int startSquare, int targetSquare, int flags = 0)
+    {
+        byte moving = _board.Get(startSquare);
+        byte target = _board.Get(targetSquare);
+
+        var undo = new Undo
+        {
+            From = startSquare,
+            To = targetSquare,
+            MovedPiece = moving,
+            CapturedPiece = target,
+            PrevSideToMove = this.SideToMove,
+            PrevEnPassantSquare = this.EnPassantSquare,
+            PrevHalfMoveClock = this.HalfmoveClock,
+            PrevFullMoveNumber = this.FullmoveNumber,
+            PrevCastlingRights = this.CastlingRights
+        };
+        _history.Push(undo);
+
+        _board.Set(startSquare, Piece.None);
+        _board.Set(targetSquare, moving);
+
+        //default reset en-passant
+        this.EnPassantSquare = -1;
+
+        //Halfmove clock
+        if (Piece.TypeOf(moving) == PieceType.Pawn || target != Piece.None)
+        {
+            HalfmoveClock = 0;
+        }
+        else
+        {
+            HalfmoveClock++;
+        }
+
+        //pawn double-move
+        if (Piece.TypeOf(moving) == PieceType.Pawn && Math.Abs(targetSquare - startSquare) == 16)
+        {
+            this.EnPassantSquare = (startSquare + targetSquare) / 2;
+        }
+
+        //full move incr
+        if (this.SideToMove == Color.Black)
+        {
+            this.FullmoveNumber++;
+        }
+
+        //switch sides
+        this.SideToMove = OtherColor(this.SideToMove);
+        this.OpponentColor = OtherColor(this.SideToMove);
+
+        //TODO castling rights, promotions, en-passant captures
+    }
+    public void MakeMove(Move move, int flags = 0) => MakeMove(move.StartSquare, move.TargetSquare, flags);
+
+    public void UnmakeMove()
+    {
+        if (_history.Count == 0) { throw new InvalidOperationException("No move to unmake."); }
+
+        var undo = _history.Pop();
+
+        _board.Set(undo.To, undo.CapturedPiece);
+        _board.Set(undo.From, undo.MovedPiece);
+
+        this.SideToMove = undo.PrevSideToMove;
+        this.OpponentColor = OtherColor(this.SideToMove);
+        this.EnPassantSquare = undo.PrevEnPassantSquare;
+        this.HalfmoveClock = undo.PrevHalfMoveClock;
+        this.FullmoveNumber = undo.PrevFullMoveNumber;
+        this.CastlingRights = undo.PrevCastlingRights;
+    }
+
+    public int GetKingSquareForSide(Color side)
+    {
+        foreach ((int square, byte piece) in EnumeratePieces())
+        {
+            if (Piece.TypeOf(piece) == PieceType.King && Piece.ColorOf(piece) == side)
+            {
+                return square;
+            }
+        }
+        return -1;
+    }
 
     private void InitializeStartPosition()
     {
@@ -48,13 +153,13 @@ public sealed class Position
     }
     internal void LoadFrom(FenPositionInfo info)
     {
-        this.board.Clear();
+        this._board.Clear();
         for (int sq = 0; sq < 64; sq++)
         {
-            this.board.Set(sq, info.Squares[sq]);
+            this._board.Set(sq, info.Squares[sq]);
         }
         this.SideToMove = info.SideToMove;
-        this.OpponentColor = this.SideToMove == Color.White ? Color.Black : Color.White;
+        this.OpponentColor = OtherColor(this.SideToMove);
         this.EnPassantSquare = info.EnPassantSquare;
         this.HalfmoveClock = info.HalfmoveClock;
         this.FullmoveNumber = info.FullmoveNumber;

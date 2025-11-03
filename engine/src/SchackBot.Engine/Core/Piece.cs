@@ -1,9 +1,12 @@
 
+using System.Runtime.CompilerServices;
+
 namespace SchackBot.Engine.Core;
 
 
 public static class Piece
 {
+    public const byte None = 0;
     private const byte TypeMask = 0b0111;
     private const byte ColorMask = 0b1000;
 

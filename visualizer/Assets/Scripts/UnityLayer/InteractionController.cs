@@ -1,5 +1,9 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
+
+using SchackBot.Engine.Positioning;
+using SchackBot.Engine.MoveGeneration;
 
 [DisallowMultipleComponent]
 public class InteractionController : MonoBehaviour
@@ -8,6 +12,7 @@ public class InteractionController : MonoBehaviour
     [SerializeField] private Camera cam;
     [SerializeField] private BoardHighlights highlights;
     [SerializeField] private BoardPieceRegistry registry;
+    [SerializeField] private PositionView2D positionView; // <-- new: reference to the PositionView2D which owns the global Position
 
     [Header("Cursor")]
     [SerializeField] private Texture2D openHandCursor;
@@ -38,6 +43,7 @@ public class InteractionController : MonoBehaviour
         if (cam == null) { cam = Camera.main; }
         if (highlights == null) { highlights = FindObjectOfType<BoardHighlights>(); }
         if (registry == null) { registry = FindAnyObjectByType<BoardPieceRegistry>(); }
+        if (positionView == null) { positionView = FindObjectOfType<PositionView2D>(); }
     }
 
     private void Update()
@@ -161,6 +167,12 @@ public class InteractionController : MonoBehaviour
                     {
                         highlights.SetLastMove(_dragFromSquareIndex, toSquareIndex);
                     }
+
+                    // Update positionView's CurrentPosition if possible (best-effort)
+                    if (positionView != null)
+                    {
+                        positionView.TryRefreshCurrentPosition(); // best-effort placeholder
+                    }
                 }
                 else
                 {
@@ -260,6 +272,50 @@ public class InteractionController : MonoBehaviour
             Vector3 p = _selectedPiece.transform.position;
             _selectedPiece.transform.position = new Vector3(p.x, BoardCoord.Origin.y + clickSelectLift, p.z);
         }
+
+        if (_selectedPiece != null && highlights != null)
+        {
+            Position pos = null;
+            if (positionView != null)
+            {
+                pos = positionView.CurrentPosition;
+            }
+
+            // If the Position isn't available, try parsing the fen as a fallback (best-effort).
+            if (pos == null && positionView != null)
+            {
+                try
+                {
+                    pos = Position.FromFen(positionView.fen);
+                    positionView.SetCurrentPosition(pos); // store for future queries
+                }
+                catch
+                {
+                    pos = null;
+                }
+            }
+
+            if (pos != null)
+            {
+                var gen = new MoveGenerator();
+                var movesSpan = gen.GenerateMoves(pos); // pseudo-legal moves for now
+
+                var targets = new List<int>();
+                for (int i = 0; i < movesSpan.Length; i++)
+                {
+                    var m = movesSpan[i];
+                    if (m.StartSquare == _selectedFromSquareIndex)
+                    {
+                        targets.Add(m.TargetSquare);
+                    }
+                }
+
+                if (targets.Count > 0)
+                {
+                    highlights.ShowDots(targets);
+                }
+            }
+        }
     }
 
     private static void SnapPieceToSquareCenter(MovablePiece piece, float liftY)
@@ -283,6 +339,12 @@ public class InteractionController : MonoBehaviour
 
         piece.SetSquare(toSquareIndex);
         registry.Move(fromSquareIndex, toSquareIndex);
+
+        // best-effort attempt to refresh the Position held by positionView
+        if (positionView != null)
+        {
+            positionView.TryRefreshCurrentPosition();
+        }
     }
 
     private void CommitAnimated(MovablePiece piece, int fromSquareIndex, int toSquareIndex)
@@ -323,6 +385,12 @@ public class InteractionController : MonoBehaviour
         {
             highlights.SetDestination(null);
             highlights.SetSelection(null);
+        }
+
+        // best-effort attempt to refresh the Position held by positionView
+        if (positionView != null)
+        {
+            positionView.TryRefreshCurrentPosition();
         }
     }
 

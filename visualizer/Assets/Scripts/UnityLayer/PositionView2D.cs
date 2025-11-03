@@ -29,6 +29,7 @@ public class PositionView2D : MonoBehaviour
     public bool whiteAtBottom = true;
 
     private Transform piecesRoot; // all spawned pieces live here
+    public Position CurrentPosition { get; private set; }
 
     void OnEnable()
     {
@@ -67,8 +68,11 @@ public class PositionView2D : MonoBehaviour
         catch
         {
             ClearPieces();
+            CurrentPosition = null;
             return;
         }
+
+        CurrentPosition = pos;
 
         // Fresh container
         ClearPieces();
@@ -122,6 +126,24 @@ public class PositionView2D : MonoBehaviour
                 // Fallback: place via BoardCoord directly (still centered & consistent)
                 go.transform.position = BoardCoord.SquareToWorld(square);
             }
+        }
+    }
+
+    public void SetCurrentPosition(Position pos)
+    {
+        CurrentPosition = pos;
+    }
+
+    public void TryRefreshCurrentPosition()
+    {
+        try
+        {
+            var text = string.IsNullOrWhiteSpace(fen) ? DefaultStartFen : fen.Trim();
+            CurrentPosition = Position.FromFen(text);
+        }
+        catch
+        {
+            // ignore parse errors - caller should handle if null
         }
     }
 

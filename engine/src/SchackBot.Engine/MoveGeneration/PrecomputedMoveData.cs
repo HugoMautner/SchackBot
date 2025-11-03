@@ -9,7 +9,7 @@ public static class PrecomputedMoveData
     // N, S, W, E, NW, SE, NE, SW
     public static readonly int[] DirectionOffsets = [8, -8, -1, 1, 7, -7, 9, -9];
 
-    // example: if availableSquares[0][1] == 7
+    // example: if NrSquaresToEdge[0][1] == 7
     // there are 7 squares north of b1 (index 1)
     public static readonly int[][] NrSquaresToEdge;
 
