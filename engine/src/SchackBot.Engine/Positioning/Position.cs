@@ -41,7 +41,7 @@ public sealed class Position
 
     private Position()
     {
-        this.OpponentColor = OtherColor(SideToMove);
+        OpponentColor = OtherColor(SideToMove);
     }
 
     public static Position Start()
@@ -59,9 +59,9 @@ public sealed class Position
         return pos;
     }
 
-    public byte GetPieceAt(int square) => this._board.Get(square);
+    public byte GetPieceAt(int square) => _board.Get(square);
 
-    public IEnumerable<(int square, byte piece)> EnumeratePieces() => this._board.Enumerate();
+    public IEnumerable<(int square, byte piece)> EnumeratePieces() => _board.Enumerate();
 
     public void MakeMove(int startSquare, int targetSquare, int flags = 0)
     {
@@ -74,11 +74,11 @@ public sealed class Position
             To = targetSquare,
             MovedPiece = moving,
             CapturedPiece = target,
-            PrevSideToMove = this.SideToMove,
-            PrevEnPassantSquare = this.EnPassantSquare,
-            PrevHalfMoveClock = this.HalfmoveClock,
-            PrevFullMoveNumber = this.FullmoveNumber,
-            PrevCastlingRights = this.CastlingRights
+            PrevSideToMove = SideToMove,
+            PrevEnPassantSquare = EnPassantSquare,
+            PrevHalfMoveClock = HalfmoveClock,
+            PrevFullMoveNumber = FullmoveNumber,
+            PrevCastlingRights = CastlingRights
         };
         _history.Push(undo);
 
@@ -86,7 +86,7 @@ public sealed class Position
         _board.Set(targetSquare, moving);
 
         //default reset en-passant
-        this.EnPassantSquare = -1;
+        EnPassantSquare = -1;
 
         //Halfmove clock
         if (Piece.TypeOf(moving) == PieceType.Pawn || target != Piece.None)
@@ -101,18 +101,18 @@ public sealed class Position
         //pawn double-move
         if (Piece.TypeOf(moving) == PieceType.Pawn && Math.Abs(targetSquare - startSquare) == 16)
         {
-            this.EnPassantSquare = (startSquare + targetSquare) / 2;
+            EnPassantSquare = (startSquare + targetSquare) / 2;
         }
 
         //full move incr
-        if (this.SideToMove == Color.Black)
+        if (SideToMove == Color.Black)
         {
-            this.FullmoveNumber++;
+            FullmoveNumber++;
         }
 
         //switch sides
-        this.SideToMove = OtherColor(this.SideToMove);
-        this.OpponentColor = OtherColor(this.SideToMove);
+        SideToMove = OtherColor(SideToMove);
+        OpponentColor = OtherColor(SideToMove);
 
         //TODO castling rights, promotions, en-passant captures
     }
@@ -127,12 +127,12 @@ public sealed class Position
         _board.Set(undo.To, undo.CapturedPiece);
         _board.Set(undo.From, undo.MovedPiece);
 
-        this.SideToMove = undo.PrevSideToMove;
-        this.OpponentColor = OtherColor(this.SideToMove);
-        this.EnPassantSquare = undo.PrevEnPassantSquare;
-        this.HalfmoveClock = undo.PrevHalfMoveClock;
-        this.FullmoveNumber = undo.PrevFullMoveNumber;
-        this.CastlingRights = undo.PrevCastlingRights;
+        SideToMove = undo.PrevSideToMove;
+        OpponentColor = OtherColor(SideToMove);
+        EnPassantSquare = undo.PrevEnPassantSquare;
+        HalfmoveClock = undo.PrevHalfMoveClock;
+        FullmoveNumber = undo.PrevFullMoveNumber;
+        CastlingRights = undo.PrevCastlingRights;
     }
 
     public int GetKingSquareForSide(Color side)
@@ -149,22 +149,22 @@ public sealed class Position
 
     private void InitializeStartPosition()
     {
-        this.LoadFrom(Fen.Parse(Fen.startFEN));
+        LoadFrom(Fen.Parse(Fen.startFEN));
     }
     internal void LoadFrom(FenPositionInfo info)
     {
-        this._board.Clear();
+        _board.Clear();
         for (int sq = 0; sq < 64; sq++)
         {
-            this._board.Set(sq, info.Squares[sq]);
+            _board.Set(sq, info.Squares[sq]);
         }
-        this.SideToMove = info.SideToMove;
-        this.OpponentColor = OtherColor(this.SideToMove);
-        this.EnPassantSquare = info.EnPassantSquare;
-        this.HalfmoveClock = info.HalfmoveClock;
-        this.FullmoveNumber = info.FullmoveNumber;
+        SideToMove = info.SideToMove;
+        OpponentColor = OtherColor(SideToMove);
+        EnPassantSquare = info.EnPassantSquare;
+        HalfmoveClock = info.HalfmoveClock;
+        FullmoveNumber = info.FullmoveNumber;
         // compact mask (bit 0: K, bit 1: Q, bit 2: k, bit 3: q)
-        this.CastlingRights =
+        CastlingRights =
             ((info.WhiteCastleKingside ? 1 : 0) << 0) |
             ((info.WhiteCastleQueenside ? 1 : 0) << 1) |
             ((info.BlackCastleKingside ? 1 : 0) << 2) |
