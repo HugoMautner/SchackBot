@@ -21,10 +21,13 @@ public static class Piece
     public static bool IsEmpty(byte piece) =>
         piece == 0;
 
+
     public static bool IsWhite(byte piece) =>
         !IsEmpty(piece) && ColorOf(piece) == Color.White;
     public static bool IsBlack(byte piece) =>
         !IsEmpty(piece) && ColorOf(piece) == Color.Black;
+    public static bool IsColor(byte piece, Color color) =>
+        !IsEmpty(piece) && ColorOf(piece) == color;
 
     public static bool IsSlider(byte piece) =>
         TypeOf(piece) is PieceType.Bishop or PieceType.Queen or PieceType.Rook;

@@ -4,7 +4,7 @@ using SchackBot.Engine.Positioning;
 
 using static SchackBot.Engine.MoveGeneration.PrecomputedMoveData;
 using static SchackBot.Engine.Core.Squares;
-using System.ComponentModel;
+using static SchackBot.Engine.Core.Piece;
 
 namespace SchackBot.Engine.MoveGeneration;
 
@@ -36,7 +36,6 @@ public class MoveGenerator
 
         return moves;
     }
-
     public int GenerateMoves(Position position, ref Span<Move> moves, bool capturesOnly)
     {
         _position = position;
@@ -47,23 +46,23 @@ public class MoveGenerator
         for (int startSquare = 0; startSquare < 64; startSquare++)
         {
             byte piece = _position.GetPieceAt(startSquare);
-            if (Piece.ColorOf(piece) == _position.SideToMove)
+            if (IsColor(piece, _position.SideToMove))
             {
-                if (Piece.TypeOf(piece) == PieceType.King) { GenerateKingMoves(moves, startSquare); }
-                if (Piece.IsSlider(piece)) { GenerateSlidingMoves(moves, startSquare, piece); }
-                if (Piece.TypeOf(piece) == PieceType.Knight) { GenerateKnightMoves(moves, startSquare); }
-                if (Piece.TypeOf(piece) == PieceType.Pawn) { GeneratePawnMoves(moves, startSquare); }
+                if (TypeOf(piece) == PieceType.King) { GenerateKingMoves(moves, startSquare); }
+                if (IsSlider(piece)) { GenerateSlidingMoves(moves, startSquare, piece); }
+                if (TypeOf(piece) == PieceType.Knight) { GenerateKnightMoves(moves, startSquare); }
+                if (TypeOf(piece) == PieceType.Pawn) { GeneratePawnMoves(moves, startSquare); }
             }
         }
 
-        moves = moves.Slice(0, _currMoveIndex); // save a little memory space
+        moves = moves[.._currMoveIndex]; // save a little memory space
         return moves.Length;
     }
 
     private void GenerateSlidingMoves(Span<Move> moves, int startSquare, byte piece)
     {
-        int startDirectionIndex = (Piece.TypeOf(piece) == PieceType.Bishop) ? 4 : 0;
-        int endDirectionIndex = (Piece.TypeOf(piece) == PieceType.Rook) ? 4 : 8;
+        int startDirectionIndex = (TypeOf(piece) == PieceType.Bishop) ? 4 : 0;
+        int endDirectionIndex = (TypeOf(piece) == PieceType.Rook) ? 4 : 8;
 
         for (int directionIndex = startDirectionIndex; directionIndex < endDirectionIndex; directionIndex++)
         {
@@ -72,11 +71,14 @@ public class MoveGenerator
                 int targetSquare = startSquare + (DirectionOffsets[directionIndex] * (n + 1));
                 byte pieceOnTargetSquare = _position.GetPieceAt(targetSquare);
 
-                if (Piece.ColorOf(pieceOnTargetSquare) == _friendlyColor) { break; }
+                if (IsColor(pieceOnTargetSquare, _friendlyColor)) { break; }
 
-                AddMove(moves, Move.NormalMove(startSquare, targetSquare));
+                bool isCapture = IsColor(pieceOnTargetSquare, _opponentColor);
 
-                if (Piece.ColorOf(pieceOnTargetSquare) == _opponentColor) { break; }
+                if (isCapture || _generateQuietMoves)
+                { AddMove(moves, Move.NormalMove(startSquare, targetSquare)); }
+
+                if (isCapture) { break; }
             }
         }
     }
@@ -89,10 +91,15 @@ public class MoveGenerator
             int targetSquare = startSquare + DirectionOffsets[directionIndex];
             byte pieceOnTargetSquare = _position.GetPieceAt(targetSquare);
 
-            if (Piece.ColorOf(pieceOnTargetSquare) == _friendlyColor) { continue; }
+            if (IsColor(pieceOnTargetSquare, _friendlyColor)) { continue; }
 
-            AddMove(moves, Move.NormalMove(startSquare, targetSquare));
+            bool isCapture = IsColor(pieceOnTargetSquare, _opponentColor);
+            if (isCapture || _generateQuietMoves)
+            { AddMove(moves, Move.NormalMove(startSquare, targetSquare)); }
         }
+
+        //castling is quiet
+        if (!_generateQuietMoves) { return; }
 
         //relative castling squares
         int kingSideBetween1 = startSquare + 1;
@@ -110,14 +117,13 @@ public class MoveGenerator
             if (InBounds(kingSideBetween1) && InBounds(kingSideBetween2) && InBounds(kingSideRookSquare))
             {
                 bool isEmptyPath =
-                    Piece.IsEmpty(_position.GetPieceAt(kingSideBetween1)) &&
-                    Piece.IsEmpty(_position.GetPieceAt(kingSideBetween2));
+                    IsEmpty(_position.GetPieceAt(kingSideBetween1)) &&
+                    IsEmpty(_position.GetPieceAt(kingSideBetween2));
                 // sanity check rook pos
                 byte rook = _position.GetPieceAt(kingSideRookSquare);
                 bool isRookOk =
-                    !Piece.IsEmpty(rook) &&
-                    Piece.TypeOf(rook) == PieceType.Rook &&
-                    Piece.ColorOf(rook) == _friendlyColor;
+                    TypeOf(rook) == PieceType.Rook &&
+                    IsColor(rook, _friendlyColor);
                 if (isEmptyPath && isRookOk)
                 {
                     AddMove(moves, new Move(startSquare, startSquare + 2));
@@ -131,15 +137,14 @@ public class MoveGenerator
             if (InBounds(queenSideBetween1) && InBounds(queenSideBetween2) && InBounds(queenSideBetween3) && InBounds(queenSideRookSquare))
             {
                 bool isEmptyPath =
-                    Piece.IsEmpty(_position.GetPieceAt(queenSideBetween1)) &&
-                    Piece.IsEmpty(_position.GetPieceAt(queenSideBetween2)) &&
-                    Piece.IsEmpty(_position.GetPieceAt(queenSideBetween3));
+                    IsEmpty(_position.GetPieceAt(queenSideBetween1)) &&
+                    IsEmpty(_position.GetPieceAt(queenSideBetween2)) &&
+                    IsEmpty(_position.GetPieceAt(queenSideBetween3));
                 // sanity check rook pos
                 byte rook = _position.GetPieceAt(queenSideRookSquare);
                 bool isRookOk =
-                    !Piece.IsEmpty(rook) &&
-                    Piece.TypeOf(rook) == PieceType.Rook &&
-                    Piece.ColorOf(rook) == _friendlyColor;
+                    TypeOf(rook) == PieceType.Rook &&
+                    IsColor(rook, _friendlyColor);
                 if (isEmptyPath && isRookOk)
                 {
                     AddMove(moves, new Move(startSquare, startSquare - 2));
@@ -161,11 +166,12 @@ public class MoveGenerator
             int targetSquare = FromFR(file, rank);
             byte pieceOnTargetSquare = _position.GetPieceAt(targetSquare);
 
-            if (!Piece.IsEmpty(pieceOnTargetSquare) &&
-                Piece.ColorOf(pieceOnTargetSquare) == _friendlyColor)
-            { continue; }
+            if (IsColor(pieceOnTargetSquare, _friendlyColor)) { continue; }
 
-            AddMove(moves, Move.NormalMove(startSquare, targetSquare));
+            bool isCapture = IsColor(pieceOnTargetSquare, _opponentColor);
+
+            if (isCapture || _generateQuietMoves)
+            { AddMove(moves, Move.NormalMove(startSquare, targetSquare)); }
         }
     }
     private void GeneratePawnMoves(Span<Move> moves, int startSquare)
@@ -174,7 +180,7 @@ public class MoveGenerator
         int pushOffset = pushDir * 8;
         int startFile = File(startSquare);
         int startRank = Rank(startSquare);
-        int promotionRank = _isWhiteToMove ? 7 : 1;
+        int promotionRank = _isWhiteToMove ? 7 : 0;
         int pawnStartRank = _isWhiteToMove ? 1 : 6;
 
         int targetSquare;
@@ -182,10 +188,9 @@ public class MoveGenerator
 
         //single-push
         targetSquare = startSquare + pushOffset;
-        pieceOnTargetSquare = _position.GetPieceAt(targetSquare);
-        if (InBounds(targetSquare) && Piece.IsEmpty(pieceOnTargetSquare))
+        if (InBounds(targetSquare) && IsEmpty(_position.GetPieceAt(targetSquare)))
         {
-            if (targetSquare == promotionRank)
+            if (Rank(targetSquare) == promotionRank)
             {
                 GeneratePromotions(moves, startSquare, targetSquare);
             }
@@ -204,7 +209,7 @@ public class MoveGenerator
             byte pieceOnMiddleSquare = _position.GetPieceAt(middleSquare);
 
             //rank is checked - no need for inbound checking
-            if (Piece.IsEmpty(pieceOnTargetSquare) && Piece.IsEmpty(pieceOnMiddleSquare))
+            if (IsEmpty(pieceOnTargetSquare) && IsEmpty(pieceOnMiddleSquare))
             {
                 if (_generateQuietMoves) { AddMove(moves, Move.CreatePawnTwo(startSquare, targetSquare)); }
             }
@@ -213,19 +218,20 @@ public class MoveGenerator
         //captures
         foreach (int df in new[] { -1, 1 })
         {
-            targetSquare = FromFR(startFile + df, startRank + pushOffset);
-            if (!InBounds(targetSquare)) { continue; }
+            int tf = startFile + df;
+            int tr = startRank + pushDir;
+            if (!InBounds(tf, tr)) { continue; }
+            targetSquare = FromFR(tf, tr);
+
+            if (_position.EnPassantSquare >= 0) { GenerateEP(moves, startSquare, targetSquare); }
 
             pieceOnTargetSquare = _position.GetPieceAt(targetSquare);
-            if (!Piece.IsEmpty(pieceOnTargetSquare) && Piece.ColorOf(pieceOnTargetSquare) == _opponentColor)
+            if (IsColor(pieceOnTargetSquare, _opponentColor))
             {
                 if (Rank(targetSquare) == promotionRank) { GeneratePromotions(moves, startSquare, targetSquare); }
                 else { AddMove(moves, Move.NormalMove(startSquare, targetSquare)); }
             }
         }
-
-        //EP capture
-
     }
 
     private void GeneratePromotions(Span<Move> moves, int startSquare, int targetSquare)
@@ -246,13 +252,19 @@ public class MoveGenerator
             AddMove(moves, Move.CreatePromotion(startSquare, targetSquare, MoveFlag.PromoteToKnight));
         }
     }
+    private void GenerateEP(Span<Move> moves, int startSquare, int targetSquare)
+    {
+        if (targetSquare != _position.EnPassantSquare) { return; }
+        if (_friendlyColor == Color.White && Rank(startSquare) != 4) { return; }
+        if (_friendlyColor == Color.Black && Rank(startSquare) != 3) { return; }
 
+        AddMove(moves, Move.CreateEnPassant(startSquare, targetSquare));
+    }
     private void AddMove(Span<Move> moves, Move move)
     {
         if (_currMoveIndex >= moves.Length) { throw new InvalidOperationException("Move buffer overflow"); }
         moves[_currMoveIndex++] = move;
     }
-
     private void Init()
     {
         _currMoveIndex = 0;
