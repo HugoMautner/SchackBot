@@ -32,6 +32,10 @@ Thumbs.db
 
 # Unity generated
 *.unitypackage
+*.csproj
+*.sln
+*.user
+*.userprefs
 
 # Packages auto-generated lockfile OK to commit (helps determinism)
 # If you *don’t* want to commit it, uncomment:
