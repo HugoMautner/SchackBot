@@ -1,0 +1,41 @@
+name: Publish UCI adapter
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'SchackBot/**'
+      - '.github/workflows/publish-uci.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rid: [win-x64, linux-x64]   # pick targets CI should produce. Add osx-* only on macOS runners.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'  # adjust if you need a different SDK
+
+      - name: Show .NET info
+        run: dotnet --info
+
+      - name: Ensure build script is executable
+        run: chmod +x SchackBot/scripts/build.sh
+
+      - name: Publish SchackBot UCI adapter (RID=${{ matrix.rid }})
+        run: |
+          # run script from repo root, build and zip the publish folder
+          bash SchackBot/scripts/build.sh ${{ matrix.rid }} zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: schackbot-${{ matrix.rid }}
+          path: SchackBot/publish/${{ matrix.rid }}/*

@@ -56,6 +56,12 @@ dotnet_diagnostic.CA1711.severity = none
 # IDE0009: Member access should be qualified.
 dotnet_diagnostic.IDE0009.severity = none
 
+# CA1051: Do not declare visible instance fields
+dotnet_diagnostic.CA1051.severity = suggestion
+
+# CA1822: Mark members as static
+dotnet_diagnostic.CA1822.severity = none
+
 [**/tests/**/*.cs]
 # Allow underscores in test names (CA1707)
 dotnet_diagnostic.CA1707.severity = none
