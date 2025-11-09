@@ -18,12 +18,56 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: true
-      - uses: actions/setup-dotnet@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          # key should change if csproj/sln changes; adjust hashing globs to your repo shape if needed
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.sln', '**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Create solution file if missing and add projects
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOL_PATH="engine/SchackBot.sln"
+
+          # ensure engine directory exists
+          mkdir -p engine
+
+          if [ ! -f "$SOL_PATH" ]; then
+            echo "Solution not found. Creating $SOL_PATH ..."
+            dotnet new sln -n SchackBot -o engine
+
+            # find csproj files, exclude build/artifact and Unity Library/Temp folders
+            # sort to make order deterministic, then add them to the solution
+            find . -type f -name '*.csproj' \
+              -not -path '*/bin/*' -not -path '*/obj/*' -not -path '*/Library/*' -not -path '*/Temp/*' \
+              -print0 | sort -z | xargs -0 -n1 -I{} bash -lc 'echo "Adding {}"; dotnet sln engine/SchackBot.sln add "{}"'
+          else
+            echo "$SOL_PATH exists — skipping creation."
+          fi
+
+      - name: Debug - list projects found (optional)
+        if: ${{ always() }}
+        run: |
+          echo "Projects in solution (for debugging):"
+          dotnet sln engine/SchackBot.sln list || true
+          echo "All csproj files discovered:"
+          find . -type f -name '*.csproj' -not -path '*/bin/*' -not -path '*/obj/*' -not -path '*/Library/*' -not -path '*/Temp/*' -print
+
       - name: Restore
         run: dotnet restore engine/SchackBot.sln
+
       - name: Build
-        run: dotnet build --configuration Release engine/SchackBot.sln
+        run: dotnet build --configuration Release engine/SchackBot.sln --no-restore
+
       - name: Test
         run: dotnet test --configuration Release --no-build engine/SchackBot.sln
