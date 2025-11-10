@@ -1,6 +1,3 @@
-
-using System.Runtime.CompilerServices;
-
 namespace SchackBot.Engine.Core;
 
 

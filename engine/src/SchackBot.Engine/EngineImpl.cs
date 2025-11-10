@@ -1,9 +1,9 @@
-// EngineImpl.cs  — minimal, zero-friction version for UCI plumbing & GUI testing
 using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using SchackBot.Engine.Positioning;
+using SchackBot.Engine.Core;
+using SchackBot.Engine.Board;
 using Color = SchackBot.Engine.Core.Color;
 
 namespace SchackBot.Engine
@@ -89,23 +89,10 @@ namespace SchackBot.Engine
 
             string from = uci.Substring(0, 2);
             string to = uci.Substring(2, 2);
-            int fromIdx = SquareNameToIndex(from);
-            int toIdx = SquareNameToIndex(to);
+            int fromIdx = Squares.ToSquareIndex(from);
+            int toIdx = Squares.ToSquareIndex(to);
             int flags = 0;
             pos.MakeMove(fromIdx, toIdx, flags);
-        }
-
-        // a1 -> 0, b1 -> 1, ..., a2 -> 8, ..., h8 -> 63
-        private static int SquareNameToIndex(string sq)
-        {
-            if (sq.Length != 2) throw new ArgumentException($"Invalid square '{sq}'", nameof(sq));
-            char file = char.ToLowerInvariant(sq[0]);
-            char rank = sq[1];
-            if (file < 'a' || file > 'h') throw new ArgumentException($"Invalid file in square '{sq}'");
-            if (rank < '1' || rank > '8') throw new ArgumentException($"Invalid rank in square '{sq}'");
-            int fileIndex = file - 'a';
-            int rankIndex = rank - '1';
-            return rankIndex * 8 + fileIndex;
         }
     }
 }

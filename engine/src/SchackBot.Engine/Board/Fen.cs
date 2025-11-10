@@ -1,8 +1,7 @@
 using System;
 using SchackBot.Engine.Core;
 
-namespace SchackBot.Engine.Positioning.Internal;
-
+namespace SchackBot.Engine.Board.Internal;
 
 internal static class Fen
 {

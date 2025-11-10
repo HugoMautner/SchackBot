@@ -1,8 +1,7 @@
 
 using System;
-using SchackBot.Engine.Core;
 
-namespace SchackBot.Engine.MoveGeneration;
+namespace SchackBot.Engine.Core;
 
 public readonly struct Move : IEquatable<Move>
 {

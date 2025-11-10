@@ -1,5 +1,5 @@
 
-namespace SchackBot.Engine.MoveGeneration;
+namespace SchackBot.Engine.Core;
 
 public enum MoveFlag : byte
 {

@@ -1,6 +1,6 @@
 using SchackBot.Engine.Core;
 using SchackBot.Engine.MoveGeneration;
-using SchackBot.Engine.Positioning;
+using SchackBot.Engine.Board;
 using static SchackBot.Engine.Core.Squares;
 
 namespace SchackBot.Engine.Tests.MoveGeneration

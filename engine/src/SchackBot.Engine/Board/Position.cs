@@ -3,11 +3,11 @@ using System;
 using System.Collections.Generic;
 using SchackBot.Engine.Core;
 using SchackBot.Engine.MoveGeneration;
-using SchackBot.Engine.Positioning.Internal;
+using SchackBot.Engine.Board.Internal;
 
 using static SchackBot.Engine.Core.ColorExtensions;
 
-namespace SchackBot.Engine.Positioning;
+namespace SchackBot.Engine.Board;
 
 public sealed class Position
 {

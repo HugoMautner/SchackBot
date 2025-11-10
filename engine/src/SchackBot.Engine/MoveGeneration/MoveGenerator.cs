@@ -1,6 +1,6 @@
 using System;
 using SchackBot.Engine.Core;
-using SchackBot.Engine.Positioning;
+using SchackBot.Engine.Board;
 
 using static SchackBot.Engine.MoveGeneration.PrecomputedMoveData;
 using static SchackBot.Engine.Core.Squares;

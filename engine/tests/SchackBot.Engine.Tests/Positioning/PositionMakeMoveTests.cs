@@ -1,6 +1,6 @@
 using System.Linq;
 using SchackBot.Engine.Core;
-using SchackBot.Engine.Positioning;
+using SchackBot.Engine.Board;
 
 namespace SchackBot.Engine.Tests.Positioning;
 

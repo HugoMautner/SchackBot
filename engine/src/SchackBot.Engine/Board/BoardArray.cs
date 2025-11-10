@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using SchackBot.Engine.Core;
 
-namespace SchackBot.Engine.Positioning;
+namespace SchackBot.Engine.Board;
 
 internal sealed class BoardArray
 {
