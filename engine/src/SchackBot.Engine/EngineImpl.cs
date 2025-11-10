@@ -53,14 +53,28 @@ namespace SchackBot.Engine
         public void PonderHit() { }
 
         // Replace with real searcher later
-        public Task<SearchResult> StartSearchAsync(SearchParams pars, CancellationToken token, IProgress<SearchInfo> progress)
+        public async Task<SearchResult> StartSearchAsync(SearchParams pars, CancellationToken token, IProgress<SearchInfo> progress)
         {
             // Respect cancellation if already requested
-            if (token.IsCancellationRequested) { return Task.FromCanceled<SearchResult>(token); }
+            if (token.IsCancellationRequested) { return await Task.FromCanceled<SearchResult>(token).ConfigureAwait(false); }
 
             Color side = _internalBoard.SideToMove;
+
+            // dummy info line for GUI
+            progress?.Report(new SearchInfo
+            {
+                Depth = 1,
+                SelDepth = 1,
+                ScoreCp = 0,
+                Nodes = 1,
+                Pv = (side == Color.White) ? "e2e4" : "e7e5"
+            });
+
+            // emulate thinking
+            await Task.Delay(50, token).ConfigureAwait(false);
+
             string best = (side == Color.White) ? "e2e4" : "e7e5";
-            return Task.FromResult(new SearchResult { BestMoveUci = best, BestMovePonderUci = null });
+            return new SearchResult { BestMoveUci = best };
         }
 
         // ----------------- helpers -----------------
