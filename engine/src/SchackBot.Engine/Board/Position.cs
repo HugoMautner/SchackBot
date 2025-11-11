@@ -2,10 +2,12 @@
 using System;
 using System.Collections.Generic;
 using SchackBot.Engine.Core;
-using SchackBot.Engine.MoveGeneration;
 using SchackBot.Engine.Board.Internal;
 
 using static SchackBot.Engine.Core.ColorExtensions;
+using static SchackBot.Engine.Core.Squares;
+using static SchackBot.Engine.Core.Piece;
+using static SchackBot.Engine.Utilities.BitMasks;
 
 namespace SchackBot.Engine.Board;
 
@@ -13,37 +15,30 @@ public sealed class Position
 {
     public Color SideToMove { get; private set; } = Color.White;
     public Color OpponentColor { get; private set; }
+    public int CastlingRights { get; private set; }
     public int EnPassantSquare { get; private set; } = -1;
     public int HalfmoveClock { get; private set; }
     public int FullmoveNumber { get; private set; }
-    public int CastlingRights { get; private set; }
 
     public bool WhiteCanCastleKingside => (CastlingRights & 0b0001) != 0;
     public bool WhiteCanCastleQueenside => (CastlingRights & 0b0010) != 0;
     public bool BlackCanCastleKingside => (CastlingRights & 0b0100) != 0;
     public bool BlackCanCastleQueenside => (CastlingRights & 0b1000) != 0;
 
-    // Instance data
-    private struct Undo
-    {
-        public int From;
-        public int To;
-        public byte MovedPiece;
-        public byte CapturedPiece;
-        public Color PrevSideToMove;
-        public int PrevEnPassantSquare;
-        public int PrevHalfMoveClock;
-        public int PrevFullMoveNumber;
-        public int PrevCastlingRights;
-    }
-    private readonly BoardArray _board = new();
-    private readonly Stack<Undo> _history = new();
+    public bool IsWhiteToMove => SideToMove == Color.White;
 
+
+    #region Instance members
+    private readonly BoardArray _board = new();
+    private readonly Stack<UndoRecord> _history = new();
+    private readonly Stack<Move> _moves = new();
     private Position()
     {
         OpponentColor = OtherColor(SideToMove);
     }
+    #endregion
 
+    #region Factories
     public static Position Start()
     {
         var pos = new Position();
@@ -58,38 +53,84 @@ public sealed class Position
         pos.LoadFrom(info);
         return pos;
     }
+    #endregion
 
     public byte GetPieceAt(int square) => _board.Get(square);
 
     public IEnumerable<(int square, byte piece)> EnumeratePieces() => _board.Enumerate();
 
-    public void MakeMove(int startSquare, int targetSquare, int flags = 0)
+    public void MakeMove(Move move)
     {
-        byte moving = _board.Get(startSquare);
-        byte target = _board.Get(targetSquare);
+        #region Info about move
+        int startSquare = move.StartSquare;
+        int targetSquare = move.TargetSquare;
 
-        var undo = new Undo
-        {
-            From = startSquare,
-            To = targetSquare,
-            MovedPiece = moving,
-            CapturedPiece = target,
-            PrevSideToMove = SideToMove,
-            PrevEnPassantSquare = EnPassantSquare,
-            PrevHalfMoveClock = HalfmoveClock,
-            PrevFullMoveNumber = FullmoveNumber,
-            PrevCastlingRights = CastlingRights
-        };
+        byte movingPiece = _board.Get(startSquare);
+        PieceType movingType = TypeOf(movingPiece);
+
+        int capturedSquare = targetSquare;
+        //special EP case: capture sq != target sq
+        if (move.IsEnPassant) { capturedSquare += IsWhiteToMove ? -8 : 8; }
+
+        byte capturedPiece = _board.Get(capturedSquare);
+        #endregion
+
+        #region Record History (move + undo)
+        var undo = new UndoRecord
+        (
+            0, //TODO real zobrist
+            capturedPiece,
+            capturedSquare,
+            CastlingRights,
+            EnPassantSquare,
+            HalfmoveClock,
+            FullmoveNumber
+        );
+        _moves.Push(move);
         _history.Push(undo);
+        #endregion
 
-        _board.Set(startSquare, Piece.None);
-        _board.Set(targetSquare, moving);
+        #region PHASE A: Board Mutation
+        //kill
+        _board.Set(capturedSquare, None);
 
-        //default reset en-passant
+        //advance
+        if (move.IsPromotion)
+        {
+            _board.Set(targetSquare, Make(move.PromotionPieceType, SideToMove));
+        }
+        else
+        {
+            _board.Set(targetSquare, movingPiece);
+        }
+        _board.Set(startSquare, None);
+
+        //shuffle rook
+        if (move.IsCastle)
+        {
+            bool isKingSide = File(targetSquare) == 6;
+
+            int workingRank = IsWhiteToMove ? 0 : 7;
+            int oldRookFile = isKingSide ? 7 : 0;
+            int newRookFile = isKingSide ? 5 : 3;
+
+            int oldRookSquare = FromFR(oldRookFile, workingRank);
+            int newRookSquare = FromFR(newRookFile, workingRank);
+
+            _board.Set(oldRookSquare, None);
+            _board.Set(newRookSquare, Rook(SideToMove));
+        }
+        #endregion
+
+        #region PHASE B: Ephemeral States
+
         EnPassantSquare = -1;
+        if (move.IsPawnTwo)
+        {
+            EnPassantSquare = (startSquare + targetSquare) / 2;
+        }
 
-        //Halfmove clock
-        if (Piece.TypeOf(moving) == PieceType.Pawn || target != Piece.None)
+        if (movingType is PieceType.Pawn || capturedPiece != None)
         {
             HalfmoveClock = 0;
         }
@@ -98,48 +139,66 @@ public sealed class Position
             HalfmoveClock++;
         }
 
-        //pawn double-move
-        if (Piece.TypeOf(moving) == PieceType.Pawn && Math.Abs(targetSquare - startSquare) == 16)
-        {
-            EnPassantSquare = (startSquare + targetSquare) / 2;
-        }
-
-        //full move incr
         if (SideToMove == Color.Black)
         {
             FullmoveNumber++;
         }
 
-        //switch sides
+        if (CastlingRights != 0)
+        {
+            if (movingType is PieceType.King)
+            {
+                // Clear both k-side + q-side rights
+                CastlingRights &= IsWhiteToMove ? ClearWhiteRights : ClearBlackRights;
+            }
+
+            // Clear individual rights
+            // Either move to or from corner square invalidates that side's right
+            if (startSquare == ToSquareIndex("h1") || targetSquare == ToSquareIndex("h1"))
+            { CastlingRights &= ClearWhiteKingside; }
+
+            if (startSquare == ToSquareIndex("a1") || targetSquare == ToSquareIndex("a1"))
+            { CastlingRights &= ClearWhiteQueenside; }
+
+            if (startSquare == ToSquareIndex("h8") || targetSquare == ToSquareIndex("h8"))
+            { CastlingRights &= ClearBlackKingside; }
+
+            if (startSquare == ToSquareIndex("a8") || targetSquare == ToSquareIndex("a8"))
+            { CastlingRights &= ClearBlackQueenside; }
+        }
+        #endregion
+
+        #region PHASE C: Side to Move
         SideToMove = OtherColor(SideToMove);
         OpponentColor = OtherColor(SideToMove);
+        #endregion
 
-        //TODO castling rights, promotions, en-passant captures
+        #region PHASE D: Zobrist + chache
+        #endregion
     }
-    public void MakeMove(Move move, int flags = 0) => MakeMove(move.StartSquare, move.TargetSquare, flags);
 
     public void UnmakeMove()
     {
         if (_history.Count == 0) { throw new InvalidOperationException("No move to unmake."); }
 
-        var undo = _history.Pop();
+        UndoRecord undo = _history.Pop();
 
-        _board.Set(undo.To, undo.CapturedPiece);
-        _board.Set(undo.From, undo.MovedPiece);
+        // _board.Set(undo.To, undo.CapturedPiece);
+        // _board.Set(undo.From, undo.MovedPiece);
 
-        SideToMove = undo.PrevSideToMove;
-        OpponentColor = OtherColor(SideToMove);
-        EnPassantSquare = undo.PrevEnPassantSquare;
-        HalfmoveClock = undo.PrevHalfMoveClock;
-        FullmoveNumber = undo.PrevFullMoveNumber;
-        CastlingRights = undo.PrevCastlingRights;
+        // MoveColor = undo.PrevSideToMove;
+        // OpponentColor = OtherColor(MoveColor);
+        // EnPassantSquare = undo.PrevEnPassantSquare;
+        // HalfmoveClock = undo.PrevHalfMoveClock;
+        // FullmoveNumber = undo.PrevFullMoveNumber;
+        // CastlingRights = undo.PrevCastlingRights;
     }
 
-    public int GetKingSquareForSide(Color side)
+    public int GetKingSquare(Color side)
     {
         foreach ((int square, byte piece) in EnumeratePieces())
         {
-            if (Piece.TypeOf(piece) == PieceType.King && Piece.ColorOf(piece) == side)
+            if (TypeOf(piece) == PieceType.King && ColorOf(piece) == side)
             {
                 return square;
             }
@@ -147,6 +206,14 @@ public sealed class Position
         return -1;
     }
 
+    public bool IsSquareAttacked(int square, Color attacker)
+    {
+        // int rank = Rank(square);
+        // int file = File(square);
+        throw new NotImplementedException();
+    }
+
+    #region Private methods
     private void InitializeStartPosition()
     {
         LoadFrom(Fen.Parse(Fen.startFEN));
@@ -174,4 +241,5 @@ public sealed class Position
         // Caches, move history, Zobrist/hash values, attack tables, etc.,
         // clear or recompute them here so the Position matches the FEN exactly.
     }
+    #endregion
 }

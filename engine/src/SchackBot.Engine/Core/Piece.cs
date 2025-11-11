@@ -33,4 +33,17 @@ public static class Piece
     public static bool IsDiagonalSlider(byte piece) =>
         TypeOf(piece) is PieceType.Bishop or PieceType.Queen;
 
+    // Helper factories
+    public static byte Rook(Color color) =>
+        Make(PieceType.Rook, color);
+    public static byte Knight(Color color) =>
+        Make(PieceType.Knight, color);
+    public static byte Bishop(Color color) =>
+        Make(PieceType.Bishop, color);
+    public static byte Queen(Color color) =>
+        Make(PieceType.Queen, color);
+    public static byte King(Color color) =>
+        Make(PieceType.King, color);
+    public static byte Pawn(Color color) =>
+        Make(PieceType.Pawn, color);
 }

@@ -91,8 +91,7 @@ namespace SchackBot.Engine
             string to = uci.Substring(2, 2);
             int fromIdx = Squares.ToSquareIndex(from);
             int toIdx = Squares.ToSquareIndex(to);
-            int flags = 0;
-            pos.MakeMove(fromIdx, toIdx, flags);
+            pos.MakeMove(Move.NormalMove(fromIdx, toIdx));
         }
     }
 }
