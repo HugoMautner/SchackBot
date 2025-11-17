@@ -8,6 +8,7 @@ using static SchackBot.Engine.Core.ColorExtensions;
 using static SchackBot.Engine.Core.Squares;
 using static SchackBot.Engine.Core.Piece;
 using static SchackBot.Engine.Utilities.BitMasks;
+using SchackBot.Engine.MoveGeneration;
 
 namespace SchackBot.Engine.Board;
 
@@ -42,6 +43,9 @@ public sealed class Position
     private readonly BoardArray _board = new();
     private readonly Stack<UndoRecord> _history = new();
     private readonly Stack<Move> _moves = new();
+    private bool _cachedInCheck;
+    private bool _hasCachedInCheck;
+
     private Position()
     {
         OpponentColor = OtherColor(SideToMove);
@@ -115,6 +119,11 @@ public sealed class Position
         }
         _board.Set(startSquare, None);
 
+        if (movingType is PieceType.King)
+        {
+            KingSquare[SideToMoveIndex] = targetSquare;
+        }
+
         //shuffle rook
         if (move.IsCastle)
         {
@@ -184,6 +193,9 @@ public sealed class Position
         #endregion
 
         #region PHASE D: Zobrist + cache
+
+
+        _hasCachedInCheck = false;
         #endregion
     }
 
@@ -230,6 +242,11 @@ public sealed class Position
             _board.Set(startSquare, moverPiece);
         }
 
+        if (TypeOf(moverPiece) is PieceType.King)
+        {
+            KingSquare[OpponentColorIndex] = startSquare;
+        }
+
         // Revive
         if (undoRec.CapturedPiece != None)
         {
@@ -250,31 +267,109 @@ public sealed class Position
         #endregion
 
         #region Zobrist + cache
+
+        _hasCachedInCheck = false;
         #endregion
     }
 
     public int GetKingSquare(Color side)
     {
-        foreach ((int square, byte piece) in EnumeratePieces())
-        {
-            if (TypeOf(piece) == PieceType.King && ColorOf(piece) == side)
-            {
-                return square;
-            }
-        }
-        return -1;
+        return (side is Color.White) ? KingSquare[WhiteIndex] : KingSquare[BlackIndex];
     }
 
     public bool IsSquareAttacked(int square, Color attacker)
     {
-        // int rank = Rank(square);
-        // int file = File(square);
         throw new NotImplementedException();
     }
 
-    public bool IsKingInCheck(Color side)
+    public bool IsInCheck()
     {
-        return IsSquareAttacked(GetKingSquare(side), OtherColor(side));
+        if (_hasCachedInCheck)
+        {
+            return _cachedInCheck;
+        }
+
+        _cachedInCheck = CalculateInCheck(SideToMove);
+        _hasCachedInCheck = true;
+        return _cachedInCheck;
+    }
+
+    public bool CalculateInCheck(Color defender)
+    {
+        Color attacker = OtherColor(defender);
+        int k = KingSquare[(int)defender];
+
+        if (k < 0) { return false; }
+
+        #region Pawns
+        int p1 = -1, p2 = -1;
+        int fileK = File(k);
+        if (defender is Color.White)
+        {
+            if (fileK > 0) { p1 = k + 7; }
+            if (fileK < 7) { p2 = k + 9; }
+        }
+        else
+        {
+            if (fileK < 7) { p1 = k - 7; }
+            if (fileK > 0) { p2 = k - 9; }
+        }
+        if ((p1 >= 0 && _board.Get(p1) == Pawn(attacker)) ||
+            (p2 >= 0 && _board.Get(p2) == Pawn(attacker))
+        ) { return true; }
+        #endregion
+
+        #region Knights
+        foreach (int square in PrecomputedMoveData.KnightMoves[k])
+        {
+            if (_board.Get(square) == Knight(attacker)) { return true; }
+        }
+        #endregion
+
+        #region Orthogonal sliders
+        foreach (int[] ray in PrecomputedMoveData.RookRays[k])
+        {
+            foreach (int square in ray)
+            {
+                byte piece = _board.Get(square);
+                if (!IsEmpty(piece))
+                {
+                    if (IsColor(piece, attacker) &&
+                        IsOrthogonalSlider(piece)
+                    ) { return true; }
+                    break; // go to next ray
+                }
+            }
+        }
+        #endregion
+
+        #region Diagonal sliders
+        foreach (int[] ray in PrecomputedMoveData.BishopRays[k])
+        {
+            foreach (int square in ray)
+            {
+                byte piece = _board.Get(square);
+                if (!IsEmpty(piece))
+                {
+                    if (IsColor(piece, attacker) &&
+                        IsDiagonalSlider(piece)
+                    ) { return true; }
+                    break; // go to next ray
+                }
+            }
+        }
+        #endregion
+
+        #region King
+        // Adjacent enemy king
+        // (Not possible in a legal position, but included for completeness)
+        foreach (int square in PrecomputedMoveData.KingMoves[k])
+        {
+            if (_board.Get(square) == King(attacker)) { return true; }
+        }
+        #endregion
+
+        return false;
     }
 
     #region Private methods

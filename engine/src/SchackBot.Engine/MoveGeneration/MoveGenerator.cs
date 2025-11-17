@@ -22,12 +22,6 @@ public class MoveGenerator
     private bool _isWhiteToMove;
     private int _currMoveIndex;
 
-    //clock-wise relative knight jumps
-    private static readonly (int df, int dr)[] KnightOffsets = [
-        (1, 2), (2, 1), (2, -1), (1, -2),
-        (-1, -2), (-2, -1), (-2, 1), (-1, 2)
-    ];
-
     public Span<Move> GenerateMoves(Position position, bool capturesOnly = false)
     {
         var buffer = new Move[MaxMoves];
