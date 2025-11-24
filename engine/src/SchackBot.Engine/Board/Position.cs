@@ -304,6 +304,8 @@ public sealed class Position
         #region Pawns
         int p1 = -1, p2 = -1;
         int fileK = File(k);
+        byte attackerPawn = Pawn(attacker);
+
         if (defender is Color.White)
         {
             if (fileK > 0) { p1 = k + 7; }
@@ -314,8 +316,8 @@ public sealed class Position
             if (fileK < 7) { p1 = k - 7; }
             if (fileK > 0) { p2 = k - 9; }
         }
-        if ((p1 >= 0 && _board.Get(p1) == Pawn(attacker)) ||
-            (p2 >= 0 && _board.Get(p2) == Pawn(attacker))
+        if ((p1 >= 0 && _board.Get(p1) == attackerPawn) ||
+            (p2 >= 0 && _board.Get(p2) == attackerPawn)
         ) { return true; }
         #endregion
 
