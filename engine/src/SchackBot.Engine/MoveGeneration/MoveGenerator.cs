@@ -43,9 +43,13 @@ public class MoveGenerator
         Array.Copy(buffer, result, legalCount);
         return result;
     }
+    public int GenerateLegalMoves(Position position, Span<Move> buffer, bool capturesOnly) // For perft
+    {
+        int pseudoCount = GeneratePseudoLegalMoves(position, buffer, capturesOnly);
+        return FilterLegalMoves(position, buffer, pseudoCount);
+    }
 
     #endregion
-
 
     #region Helpers
     private int GeneratePseudoLegalMoves(Position position, Span<Move> buffer, bool capturesOnly)
