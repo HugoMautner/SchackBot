@@ -14,46 +14,99 @@ public class MoveGenerator
     public enum PromotionMode { All, QueenOnly, QueenAndKnight }
     public PromotionMode PromotionsToGenerate { get; set; } = PromotionMode.All;
 
-    // Instance Fields
+    #region Instance fields
     private Position _position;
     private bool _generateQuietMoves;
     private Color _friendlyColor;
     private Color _opponentColor;
     private bool _isWhiteToMove;
-    private int _currMoveIndex;
+    private int _currentMoveIndex;
+    #endregion
 
-    public Span<Move> GenerateMoves(Position position, bool capturesOnly = false)
+    #region Public API
+    public Move[] GeneratePseudoLegalMoves(Position position, bool capturesOnly)
     {
         var buffer = new Move[MaxMoves];
-        Span<Move> moves = buffer;
-        GenerateMoves(position, ref moves, capturesOnly);
+        int n = GeneratePseudoLegalMoves(position, buffer, capturesOnly);
 
-        return moves;
+        var result = new Move[n];
+        Array.Copy(buffer, result, n);
+        return result;
     }
-    public int GenerateMoves(Position position, ref Span<Move> moves, bool capturesOnly)
+    public Move[] GenerateLegalMoves(Position position, bool capturesOnly)
+    {
+        var buffer = new Move[MaxMoves];
+        int pseudoCount = GeneratePseudoLegalMoves(position, buffer, capturesOnly);
+        int legalCount = FilterLegalMoves(position, buffer, pseudoCount);
+
+        var result = new Move[legalCount];
+        Array.Copy(buffer, result, legalCount);
+        return result;
+    }
+
+    #endregion
+
+
+    #region Helpers
+    private int GeneratePseudoLegalMoves(Position position, Span<Move> buffer, bool capturesOnly)
     {
         _position = position;
         _generateQuietMoves = !capturesOnly;
-
         Init();
 
         for (int startSquare = 0; startSquare < 64; startSquare++)
         {
             byte piece = _position.GetPieceAt(startSquare);
-            if (IsColor(piece, _position.SideToMove))
-            {
-                if (TypeOf(piece) == PieceType.King) { GenerateKingMoves(moves, startSquare); }
-                if (IsSlider(piece)) { GenerateSlidingMoves(moves, startSquare, piece); }
-                if (TypeOf(piece) == PieceType.Knight) { GenerateKnightMoves(moves, startSquare); }
-                if (TypeOf(piece) == PieceType.Pawn) { GeneratePawnMoves(moves, startSquare); }
-            }
+            if (!IsColor(piece, _position.SideToMove)) { continue; }
+
+            if (TypeOf(piece) == PieceType.King) { GenerateKingMoves(buffer, startSquare); }
+            if (IsSlider(piece)) { GenerateSlidingMoves(buffer, startSquare, piece); }
+            if (TypeOf(piece) == PieceType.Knight) { GenerateKnightMoves(buffer, startSquare); }
+            if (TypeOf(piece) == PieceType.Pawn) { GeneratePawnMoves(buffer, startSquare); }
         }
 
-        moves = moves[.._currMoveIndex]; // save a little memory space
-        return moves.Length;
+        return _currentMoveIndex;
     }
 
-    private void GenerateSlidingMoves(Span<Move> moves, int startSquare, byte piece)
+    private int FilterLegalMoves(Position position, Span<Move> buffer, int count)
+    {
+        int legalMoveIndex = 0;
+
+        Color mover = position.SideToMove;
+        Color opponent = position.OpponentColor;
+
+        for (int i = 0; i < count; i++)
+        {
+            Move move = buffer[i];
+
+            if (move.IsCastle)
+            {
+                int kingFrom = move.StartSquare;
+                int kingTo = move.TargetSquare;
+                int step = (kingTo > kingFrom) ? 1 : -1;
+                int kingThrough = kingFrom + step;
+
+                if (position.IsSquareAttacked(kingFrom, opponent) ||
+                    position.IsSquareAttacked(kingThrough, opponent) ||
+                    position.IsSquareAttacked(kingTo, opponent))
+                {
+                    continue; // skip illegal castle
+                }
+            }
+
+            position.MakeMove(move);
+            bool illegal = position.CalculateInCheck(mover);
+            position.UnmakeMove();
+
+            if (!illegal)
+            {
+                buffer[legalMoveIndex++] = move;
+            }
+        }
+        return legalMoveIndex;
+    }
+
+    private void GenerateSlidingMoves(Span<Move> buffer, int startSquare, byte piece)
     {
         int startDirectionIndex = (TypeOf(piece) == PieceType.Bishop) ? 4 : 0;
         int endDirectionIndex = (TypeOf(piece) == PieceType.Rook) ? 4 : 8;
@@ -70,13 +123,13 @@ public class MoveGenerator
                 bool isCapture = IsColor(pieceOnTargetSquare, _opponentColor);
 
                 if (isCapture || _generateQuietMoves)
-                { AddMove(moves, Move.NormalMove(startSquare, targetSquare)); }
+                { AddMove(buffer, Move.NormalMove(startSquare, targetSquare)); }
 
                 if (isCapture) { break; }
             }
         }
     }
-    private void GenerateKingMoves(Span<Move> moves, int startSquare)
+    private void GenerateKingMoves(Span<Move> buffer, int startSquare)
     {
         for (int directionIndex = 0; directionIndex < 8; directionIndex++)
         {
@@ -89,7 +142,7 @@ public class MoveGenerator
 
             bool isCapture = IsColor(pieceOnTargetSquare, _opponentColor);
             if (isCapture || _generateQuietMoves)
-            { AddMove(moves, Move.NormalMove(startSquare, targetSquare)); }
+            { AddMove(buffer, Move.NormalMove(startSquare, targetSquare)); }
         }
 
         //castling is quiet
@@ -120,7 +173,7 @@ public class MoveGenerator
                     IsColor(rook, _friendlyColor);
                 if (isEmptyPath && isRookOk)
                 {
-                    AddMove(moves, new Move(startSquare, startSquare + 2));
+                    AddMove(buffer, Move.CreateCastle(startSquare, startSquare + 2));
                 }
             }
         }
@@ -141,12 +194,12 @@ public class MoveGenerator
                     IsColor(rook, _friendlyColor);
                 if (isEmptyPath && isRookOk)
                 {
-                    AddMove(moves, new Move(startSquare, startSquare - 2));
+                    AddMove(buffer, Move.CreateCastle(startSquare, startSquare - 2));
                 }
             }
         }
     }
-    private void GenerateKnightMoves(Span<Move> moves, int startSquare)
+    private void GenerateKnightMoves(Span<Move> buffer, int startSquare)
     {
         int startFile = File(startSquare);
         int startRank = Rank(startSquare);
@@ -165,10 +218,10 @@ public class MoveGenerator
             bool isCapture = IsColor(pieceOnTargetSquare, _opponentColor);
 
             if (isCapture || _generateQuietMoves)
-            { AddMove(moves, Move.NormalMove(startSquare, targetSquare)); }
+            { AddMove(buffer, Move.NormalMove(startSquare, targetSquare)); }
         }
     }
-    private void GeneratePawnMoves(Span<Move> moves, int startSquare)
+    private void GeneratePawnMoves(Span<Move> buffer, int startSquare)
     {
         int pushDir = _isWhiteToMove ? 1 : -1;
         int pushOffset = pushDir * 8;
@@ -186,11 +239,11 @@ public class MoveGenerator
         {
             if (Rank(targetSquare) == promotionRank)
             {
-                GeneratePromotions(moves, startSquare, targetSquare);
+                GeneratePromotions(buffer, startSquare, targetSquare);
             }
             else
             {
-                if (_generateQuietMoves) { AddMove(moves, Move.NormalMove(startSquare, targetSquare)); }
+                if (_generateQuietMoves) { AddMove(buffer, Move.NormalMove(startSquare, targetSquare)); }
             }
         }
 
@@ -205,7 +258,7 @@ public class MoveGenerator
             //rank is checked - no need for inbound checking
             if (IsEmpty(pieceOnTargetSquare) && IsEmpty(pieceOnMiddleSquare))
             {
-                if (_generateQuietMoves) { AddMove(moves, Move.CreatePawnTwo(startSquare, targetSquare)); }
+                if (_generateQuietMoves) { AddMove(buffer, Move.CreatePawnTwo(startSquare, targetSquare)); }
             }
         }
 
@@ -217,53 +270,54 @@ public class MoveGenerator
             if (!InBounds(tf, tr)) { continue; }
             targetSquare = FromFR(tf, tr);
 
-            if (_position.EnPassantSquare >= 0) { GenerateEP(moves, startSquare, targetSquare); }
+            if (_position.EnPassantSquare >= 0) { GenerateEP(buffer, startSquare, targetSquare); }
 
             pieceOnTargetSquare = _position.GetPieceAt(targetSquare);
             if (IsColor(pieceOnTargetSquare, _opponentColor))
             {
-                if (Rank(targetSquare) == promotionRank) { GeneratePromotions(moves, startSquare, targetSquare); }
-                else { AddMove(moves, Move.NormalMove(startSquare, targetSquare)); }
+                if (Rank(targetSquare) == promotionRank) { GeneratePromotions(buffer, startSquare, targetSquare); }
+                else { AddMove(buffer, Move.NormalMove(startSquare, targetSquare)); }
             }
         }
     }
 
-    private void GeneratePromotions(Span<Move> moves, int startSquare, int targetSquare)
+    private void GeneratePromotions(Span<Move> buffer, int startSquare, int targetSquare)
     {
-        AddMove(moves, Move.CreatePromotion(startSquare, targetSquare, MoveFlag.PromoteToQueen));
+        AddMove(buffer, Move.CreatePromotion(startSquare, targetSquare, MoveFlag.PromoteToQueen));
 
         //Q-search: queen promotions only
         if (!_generateQuietMoves) { return; }
 
         if (PromotionsToGenerate == PromotionMode.All)
         {
-            AddMove(moves, Move.CreatePromotion(startSquare, targetSquare, MoveFlag.PromoteToKnight));
-            AddMove(moves, Move.CreatePromotion(startSquare, targetSquare, MoveFlag.PromoteToBishop));
-            AddMove(moves, Move.CreatePromotion(startSquare, targetSquare, MoveFlag.PromoteToRook));
+            AddMove(buffer, Move.CreatePromotion(startSquare, targetSquare, MoveFlag.PromoteToKnight));
+            AddMove(buffer, Move.CreatePromotion(startSquare, targetSquare, MoveFlag.PromoteToBishop));
+            AddMove(buffer, Move.CreatePromotion(startSquare, targetSquare, MoveFlag.PromoteToRook));
         }
         else if (PromotionsToGenerate == PromotionMode.QueenAndKnight)
         {
-            AddMove(moves, Move.CreatePromotion(startSquare, targetSquare, MoveFlag.PromoteToKnight));
+            AddMove(buffer, Move.CreatePromotion(startSquare, targetSquare, MoveFlag.PromoteToKnight));
         }
     }
-    private void GenerateEP(Span<Move> moves, int startSquare, int targetSquare)
+    private void GenerateEP(Span<Move> buffer, int startSquare, int targetSquare)
     {
         if (targetSquare != _position.EnPassantSquare) { return; }
         if (_friendlyColor == Color.White && Rank(startSquare) != 4) { return; }
         if (_friendlyColor == Color.Black && Rank(startSquare) != 3) { return; }
 
-        AddMove(moves, Move.CreateEnPassant(startSquare, targetSquare));
+        AddMove(buffer, Move.CreateEnPassant(startSquare, targetSquare));
     }
-    private void AddMove(Span<Move> moves, Move move)
+    private void AddMove(Span<Move> buffer, Move move)
     {
-        if (_currMoveIndex >= moves.Length) { throw new InvalidOperationException("Move buffer overflow"); }
-        moves[_currMoveIndex++] = move;
+        if (_currentMoveIndex >= buffer.Length) { throw new InvalidOperationException("Move buffer overflow"); }
+        buffer[_currentMoveIndex++] = move;
     }
     private void Init()
     {
-        _currMoveIndex = 0;
+        _currentMoveIndex = 0;
         _friendlyColor = _position.SideToMove;
         _opponentColor = _position.OpponentColor;
         _isWhiteToMove = _friendlyColor == Color.White;
     }
+    #endregion
 }

@@ -48,6 +48,7 @@ public sealed class Position
 
     private Position()
     {
+        KingSquare = new int[2] { -1, -1 };
         OpponentColor = OtherColor(SideToMove);
     }
     #endregion
@@ -279,7 +280,7 @@ public sealed class Position
 
     public bool IsSquareAttacked(int square, Color attacker)
     {
-        throw new NotImplementedException();
+        return IsSquareAttackedBy(square, attacker);
     }
 
     public bool IsInCheck()
@@ -296,40 +297,48 @@ public sealed class Position
 
     public bool CalculateInCheck(Color defender)
     {
-        Color attacker = OtherColor(defender);
         int k = KingSquare[(int)defender];
-
         if (k < 0) { return false; }
+
+        Color attacker = OtherColor(defender);
+        return IsSquareAttackedBy(k, attacker);
+    }
+
+    #region Private methods
+    private bool IsSquareAttackedBy(int targetSquare, Color attacker)
+    {
+        if (!InBounds(targetSquare)) { return false; }
+
+        int targetFile = File(targetSquare);
 
         #region Pawns
         int p1 = -1, p2 = -1;
-        int fileK = File(k);
         byte attackerPawn = Pawn(attacker);
 
-        if (defender is Color.White)
+        if (attacker is Color.White)
         {
-            if (fileK > 0) { p1 = k + 7; }
-            if (fileK < 7) { p2 = k + 9; }
+            if (targetFile < 7) { p1 = targetSquare - 7; }
+            if (targetFile > 0) { p2 = targetSquare - 9; }
         }
         else
         {
-            if (fileK < 7) { p1 = k - 7; }
-            if (fileK > 0) { p2 = k - 9; }
+            if (targetFile > 0) { p1 = targetSquare + 7; }
+            if (targetFile < 7) { p2 = targetSquare + 9; }
         }
-        if ((p1 >= 0 && _board.Get(p1) == attackerPawn) ||
-            (p2 >= 0 && _board.Get(p2) == attackerPawn)
+        if ((InBounds(p1) && _board.Get(p1) == attackerPawn) ||
+            (InBounds(p2) && _board.Get(p2) == attackerPawn)
         ) { return true; }
         #endregion
 
         #region Knights
-        foreach (int square in PrecomputedMoveData.KnightMoves[k])
+        foreach (int square in PrecomputedMoveData.KnightMoves[targetSquare])
         {
             if (_board.Get(square) == Knight(attacker)) { return true; }
         }
         #endregion
 
         #region Orthogonal sliders
-        foreach (int[] ray in PrecomputedMoveData.RookRays[k])
+        foreach (int[] ray in PrecomputedMoveData.RookRays[targetSquare])
         {
             foreach (int square in ray)
             {
@@ -346,7 +355,7 @@ public sealed class Position
         #endregion
 
         #region Diagonal sliders
-        foreach (int[] ray in PrecomputedMoveData.BishopRays[k])
+        foreach (int[] ray in PrecomputedMoveData.BishopRays[targetSquare])
         {
             foreach (int square in ray)
             {
@@ -364,8 +373,8 @@ public sealed class Position
 
         #region King
         // Adjacent enemy king
-        // (Not possible in a legal position, but included for completeness)
-        foreach (int square in PrecomputedMoveData.KingMoves[k])
+        // Shouldn't be possible, but check just in case
+        foreach (int square in PrecomputedMoveData.KingMoves[targetSquare])
         {
             if (_board.Get(square) == King(attacker)) { return true; }
         }
@@ -374,7 +383,6 @@ public sealed class Position
         return false;
     }
 
-    #region Private methods
     private void InitializeStartPosition()
     {
         LoadFrom(Fen.Parse(Fen.startFEN));
@@ -382,15 +390,28 @@ public sealed class Position
     internal void LoadFrom(FenPositionInfo info)
     {
         _board.Clear();
+
+        KingSquare[WhiteIndex] = -1;
+        KingSquare[BlackIndex] = -1;
+
         for (int sq = 0; sq < 64; sq++)
         {
-            _board.Set(sq, info.Squares[sq]);
+            byte piece = info.Squares[sq];
+            _board.Set(sq, piece);
+
+            if (!IsEmpty(piece) && TypeOf(piece) == PieceType.King)
+            {
+                if (IsWhite(piece)) { KingSquare[WhiteIndex] = sq; }
+                else if (IsBlack(piece)) { KingSquare[BlackIndex] = sq; }
+            }
         }
+
         SideToMove = info.SideToMove;
         OpponentColor = OtherColor(SideToMove);
         EnPassantSquare = info.EnPassantSquare;
         HalfmoveClock = info.HalfmoveClock;
         FullmoveNumber = info.FullmoveNumber;
+
         // compact mask (bit 0: K, bit 1: Q, bit 2: k, bit 3: q)
         CastlingRights =
             ((info.WhiteCastleKingside ? 1 : 0) << 0) |
@@ -401,6 +422,9 @@ public sealed class Position
         // TODO: Reset any internal state that isn't represented in FEN.
         // Caches, move history, Zobrist/hash values, attack tables, etc.,
         // clear or recompute them here so the Position matches the FEN exactly.
+        _history.Clear();
+        _moves.Clear();
+        _hasCachedInCheck = false;
     }
     #endregion
 }
