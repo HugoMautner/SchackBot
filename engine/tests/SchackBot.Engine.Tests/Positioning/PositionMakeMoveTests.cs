@@ -18,7 +18,7 @@ public class PositionMakeMoveTests
         int e4 = Sq(4, 3);
         int e3 = Sq(4, 2);
 
-        pos.MakeMove(Move.NormalMove(e2, e4));
+        pos.MakeMove(Move.CreatePawnTwo(e2, e4));
 
         Assert.Equal(e3, pos.EnPassantSquare);
         Assert.Equal(0, pos.HalfmoveClock); // pawn move resets halfmove clock
@@ -32,9 +32,9 @@ public class PositionMakeMoveTests
         var pos = Position.FromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
 
         // e2 -> e4
-        pos.MakeMove(Move.NormalMove(Sq(4, 1), Sq(4, 3)));
+        pos.MakeMove(Move.CreatePawnTwo(Sq(4, 1), Sq(4, 3)));
         // e7 -> e5 (black)
-        pos.MakeMove(Move.NormalMove(Sq(4, 6), Sq(4, 4)));
+        pos.MakeMove(Move.CreatePawnTwo(Sq(4, 6), Sq(4, 4)));
 
         Assert.Equal(2, pos.FullmoveNumber);
         Assert.Equal(Color.White, pos.SideToMove);
@@ -46,9 +46,9 @@ public class PositionMakeMoveTests
         var pos = Position.FromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
 
         // white: e2 -> e4
-        pos.MakeMove(Move.NormalMove(Sq(4, 1), Sq(4, 3)));
+        pos.MakeMove(Move.CreatePawnTwo(Sq(4, 1), Sq(4, 3)));
         // black: d7 -> d5
-        pos.MakeMove(Move.NormalMove(Sq(3, 6), Sq(3, 4)));
+        pos.MakeMove(Move.CreatePawnTwo(Sq(3, 6), Sq(3, 4)));
         // white: e4 -> d5 (capture)
         pos.MakeMove(Move.NormalMove(Sq(4, 3), Sq(3, 4)));
 
