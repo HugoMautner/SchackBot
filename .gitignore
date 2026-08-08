@@ -5,8 +5,8 @@
 [Tt]emp/
 [Bb]uild/
 [Bb]uilds/
-Publish/
-Logs/
+[Pp]ublish/
+[Ll]ogs/
 UserSettings/
 MemoryCaptures/
 *.csproj.user
@@ -34,8 +34,9 @@ Thumbs.db
 
 # Unity generated
 *.unitypackage
-*.csproj
-*.sln
+visualizer/*.csproj
+visualizer/*.sln
+visualizer/*.slnx
 *.user
 *.userprefs
 
