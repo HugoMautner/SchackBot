@@ -1,9 +1,10 @@
 ﻿// Program.cs - UCI adapter main loop (async, warning-cleaned)
 using SchackBot.Engine;
+using System.Diagnostics.CodeAnalysis;
 
 namespace SchackBot.UciAdapter;
 
-class Program
+sealed class Program
 {
     static EngineImpl engine = null!;
     static CancellationTokenSource? searchCts;
@@ -22,6 +23,8 @@ class Program
         MainAsync(args).GetAwaiter().GetResult();
     }
 
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", 
+        Justification = "Search faults are logged to file; the UCI loop must stay alive.")]
     static async Task MainAsync(string[] args)
     {
         engine = new EngineImpl();
@@ -76,7 +79,7 @@ class Program
             {
                 var sp = ParseGo(line);
                 // cancel previous
-                searchCts?.Cancel();
+                await (searchCts?.CancelAsync() ?? Task.CompletedTask).ConfigureAwait(false);
                 searchCts = new CancellationTokenSource();
                 var token = searchCts.Token;
                 var progress = new Progress<SearchInfo>(info => EmitInfo(info));
@@ -110,7 +113,7 @@ class Program
             }
             else if (line == "stop")
             {
-                searchCts?.Cancel();
+                await (searchCts?.CancelAsync() ?? Task.CompletedTask).ConfigureAwait(false);
                 if (runningSearch != null) await runningSearch.ConfigureAwait(false);
             }
             else if (line == "ponderhit")
@@ -119,13 +122,15 @@ class Program
             }
             else if (line == "quit")
             {
-                searchCts?.Cancel();
+                await (searchCts?.CancelAsync() ?? Task.CompletedTask).ConfigureAwait(false);
                 if (runningSearch != null) await runningSearch.ConfigureAwait(false);
                 break;
             }
         }
     }
 
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types",
+        Justification = "Info emission is best-effort; a broken stdout must not fault the search.")]
     static async void EmitInfo(SearchInfo info)
     {
         // best-effort non-blocking: emit info line
