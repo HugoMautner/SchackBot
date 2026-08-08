@@ -22,14 +22,14 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          global-json-file: global.json
 
       - name: Cache NuGet packages
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
           # key should change if csproj/sln changes; adjust hashing globs to your repo shape if needed
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.sln', '**/*.csproj') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.sln', '**/*.csproj', '**/Directory.Build.props', 'global.json') }}
           restore-keys: |
             nuget-${{ runner.os }}-
 
