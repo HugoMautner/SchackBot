@@ -15,7 +15,7 @@ public sealed class PerftTests
         { 2, 400L },
         { 3, 8902L },
         { 4, 197281L },
-        // { 5, 4865609L }, // enable if CI is fast enough
+        { 5, 4865609L }, // enable if CI is fast enough
     };
 
     // Kiwipete: catches castling/EP/pins
