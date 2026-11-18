@@ -56,7 +56,6 @@ namespace SchackBot.Engine
 
         public void MakeMovesFromUci(IEnumerable<string> uciMoves)
         {
-            if (uciMoves == null) { return; }
             foreach (string uci in uciMoves)
             {
                 if (string.IsNullOrWhiteSpace(uci)) { continue; }
@@ -64,7 +63,6 @@ namespace SchackBot.Engine
             }
         }
 
-        // UCI -> Position.MakeMove mapping.
         private void ApplyUciMoveToPosition(Position pos, string uci)
         {
             if (uci.Length < 4)
@@ -72,11 +70,21 @@ namespace SchackBot.Engine
                 throw new ArgumentException($"Invalid UCI move '{uci}'", nameof(uci));
             }
 
-            string from = uci.Substring(0, 2);
-            string to = uci.Substring(2, 2);
-            int fromIdx = Squares.ToSquareIndex(from);
-            int toIdx = Squares.ToSquareIndex(to);
-            pos.MakeMove(Move.NormalMove(fromIdx, toIdx));
+            var gen = new MoveGenerator();
+            Span<Move> moves = stackalloc Move[MoveGenerator.MaxMoves];
+            int count = gen.GenerateLegalMoves(this._internalBoard, moves, capturesOnly: false);
+            if (count == 0)
+            {
+                throw new ArgumentException($"Invalid UCI move '{uci}'", nameof(uci));
+            }
+
+            foreach (Move move in moves)
+            {
+                if (move.ToUCI() != uci) continue;
+                pos.MakeMove(move);
+                return;
+            }
+            throw new ArgumentException($"Invalid UCI move '{uci}'", nameof(uci));
         }
     }
 }
