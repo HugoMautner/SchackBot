@@ -1,4 +1,6 @@
 using System;
+using System.Text;
+using Microsoft.VisualBasic.CompilerServices;
 using SchackBot.Engine.Core;
 
 namespace SchackBot.Engine.Board.Internal;
@@ -103,6 +105,139 @@ internal static class Fen
 
     internal static string Format(FenPositionInfo info)
     {
-        return "";
+        var sb = new StringBuilder(90);
+        FormatPieces(info, sb);
+        FormatColor(info, sb);
+        FormatCastling(info, sb);
+        FormatEp(info, sb);
+        FormatHalfMoveClock(info, sb);
+        FormatFullMoveNumber(info, sb);
+        return sb.ToString();
+    }
+
+    private static void FormatPieces(FenPositionInfo info, StringBuilder sb)
+    {
+        for (int rank = 7; rank >= 0; rank--)
+        {
+            int skipCount = 0;
+            for (int file = 0; file < 8; file++)
+            {
+                int square = Squares.FromFR(file, rank);
+                byte piece = info.Squares[square];
+
+                if (Piece.IsEmpty(piece))
+                {
+                    skipCount++;
+                    continue;
+                }
+
+                if (skipCount != 0)
+                {
+                    sb.Append(skipCount);
+                    skipCount = 0;
+                }
+
+                Color pieceColor = Piece.ColorOf(piece);
+                char pieceChar = ToFenCharOfColor(piece, pieceColor);
+                sb.Append(pieceChar);
+            }
+
+            if (skipCount != 0)
+            {
+                sb.Append(skipCount);
+            }
+
+            if (rank != 0)
+            {
+                sb.Append('/');
+            }
+        }
+        sb.Append(' ');
+    }
+    private static void FormatColor(FenPositionInfo info, StringBuilder sb)
+    {
+        sb.Append(info.SideToMove == Color.White ? 'w' : 'b');
+        sb.Append(' ');
+    }
+    private static void FormatCastling(FenPositionInfo info, StringBuilder sb)
+    {
+        if (!(info.WhiteCastleKingside || info.WhiteCastleQueenside ||
+              info.BlackCastleKingside || info.BlackCastleQueenside))
+        {
+            sb.Append('-');
+        }
+        if (info.WhiteCastleKingside)
+        {
+            sb.Append('K');
+        }
+        if (info.WhiteCastleQueenside)
+        {
+            sb.Append('Q');
+        }
+        if (info.BlackCastleKingside)
+        {
+            sb.Append('k');
+        }
+        if (info.BlackCastleQueenside)
+        {
+            sb.Append('q');
+        }
+        sb.Append(' ');
+    }
+    private static void FormatEp(FenPositionInfo info, StringBuilder sb)
+    {
+        if (info.EnPassantSquare != -1)
+        {
+            sb.Append(Squares.GetSquareName(info.EnPassantSquare));
+        }
+        else
+        {
+            sb.Append('-');
+        }
+        sb.Append(' ');
+    }
+    private static void FormatHalfMoveClock(FenPositionInfo info, StringBuilder sb)
+    {
+        sb.Append(info.HalfmoveClock);
+        sb.Append(' ');
+    }
+    private static void FormatFullMoveNumber(FenPositionInfo info, StringBuilder sb)
+    {
+        sb.Append(info.FullmoveNumber);
+    }
+
+    private static char ToFenCharOfColor(byte piece, Color color)
+    {
+        char pieceChar;
+        if (color is Color.White)
+        {
+            pieceChar = Piece.TypeOf(piece) switch
+            {
+                PieceType.Pawn => 'P',
+                PieceType.Knight => 'N',
+                PieceType.Bishop => 'B',
+                PieceType.Rook => 'R',
+                PieceType.Queen => 'Q',
+                PieceType.King => 'K',
+                PieceType.None => throw new ArgumentException($"Invalid piece type: {piece}"),
+                _ => throw new ArgumentException($"Invalid piece type: {piece}"),
+            };
+        }
+        else
+        {
+            pieceChar = Piece.TypeOf(piece) switch
+            {
+                PieceType.Pawn => 'p',
+                PieceType.Knight => 'n',
+                PieceType.Bishop => 'b',
+                PieceType.Rook => 'r',
+                PieceType.Queen => 'q',
+                PieceType.King => 'k',
+                PieceType.None => throw new ArgumentException($"Invalid piece type: {piece}"),
+                _ => throw new ArgumentException($"Invalid piece type: {piece}"),
+            };
+        }
+
+        return pieceChar;
     }
 }

@@ -1,10 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using SchackBot.Engine.Core;
 using SchackBot.Engine.Board;
-using Color = SchackBot.Engine.Core.Color;
+using SchackBot.Engine.Board.Internal;
+using SchackBot.Engine.MoveGeneration;
 
 namespace SchackBot.Engine
 {
@@ -17,14 +16,12 @@ namespace SchackBot.Engine
             _internalBoard = Position.Start();
         }
 
-        public IEnumerable<(string name, string type, string defaultValue)> GetOptions()
+        public void NewGame()
         {
-            yield break;
+            _internalBoard = Position.Start();
         }
 
-        public void SetOption(string name, string value) { }
-
-        public void NewGame()
+        public void SetPositionStartpos()
         {
             _internalBoard = Position.Start();
         }
@@ -35,14 +32,30 @@ namespace SchackBot.Engine
             _internalBoard = Position.FromFen(fen);
         }
 
-        public void SetPositionStartpos()
+        public string CurrentFen()
         {
-            _internalBoard = Position.Start();
+            return _internalBoard.ToFen();
+        }
+
+        public string BestLegalMove()
+        {
+            var gen = new MoveGenerator();
+            Span<Move> moves = stackalloc Move[MoveGenerator.MaxMoves];
+            int count = gen.GenerateLegalMoves(this._internalBoard, moves, capturesOnly: false);
+            if (count == 0)
+            {
+                return "0000"; // nullmove
+            }
+
+            #pragma warning disable CA5394
+            int i = Random.Shared.Next(count);
+            #pragma warning restore CA5394
+
+            return moves[i].ToUCI();
         }
 
         public void MakeMovesFromUci(IEnumerable<string> uciMoves)
         {
-            if (uciMoves == null) { return; }
             foreach (string uci in uciMoves)
             {
                 if (string.IsNullOrWhiteSpace(uci)) { continue; }
@@ -50,36 +63,6 @@ namespace SchackBot.Engine
             }
         }
 
-        public void PonderHit() { }
-
-        // Replace with real searcher later
-        public async Task<SearchResult> StartSearchAsync(SearchParams pars, CancellationToken token, IProgress<SearchInfo> progress)
-        {
-            // Respect cancellation if already requested
-            if (token.IsCancellationRequested) { return await Task.FromCanceled<SearchResult>(token).ConfigureAwait(false); }
-
-            Color side = _internalBoard.SideToMove;
-
-            // dummy info line for GUI
-            progress?.Report(new SearchInfo
-            {
-                Depth = 1,
-                SelDepth = 1,
-                ScoreCp = 0,
-                Nodes = 1,
-                Pv = (side == Color.White) ? "e2e4" : "e7e5"
-            });
-
-            // emulate thinking
-            await Task.Delay(50, token).ConfigureAwait(false);
-
-            string best = (side == Color.White) ? "e2e4" : "e7e5";
-            return new SearchResult { BestMoveUci = best };
-        }
-
-        // ----------------- helpers -----------------
-
-        // UCI -> Position.MakeMove mapping.
         private void ApplyUciMoveToPosition(Position pos, string uci)
         {
             if (uci.Length < 4)
@@ -87,11 +70,21 @@ namespace SchackBot.Engine
                 throw new ArgumentException($"Invalid UCI move '{uci}'", nameof(uci));
             }
 
-            string from = uci.Substring(0, 2);
-            string to = uci.Substring(2, 2);
-            int fromIdx = Squares.ToSquareIndex(from);
-            int toIdx = Squares.ToSquareIndex(to);
-            pos.MakeMove(Move.NormalMove(fromIdx, toIdx));
+            var gen = new MoveGenerator();
+            Span<Move> moves = stackalloc Move[MoveGenerator.MaxMoves];
+            int count = gen.GenerateLegalMoves(this._internalBoard, moves, capturesOnly: false);
+            if (count == 0)
+            {
+                throw new ArgumentException($"Invalid UCI move '{uci}'", nameof(uci));
+            }
+
+            foreach (Move move in moves)
+            {
+                if (move.ToUCI() != uci) continue;
+                pos.MakeMove(move);
+                return;
+            }
+            throw new ArgumentException($"Invalid UCI move '{uci}'", nameof(uci));
         }
     }
 }

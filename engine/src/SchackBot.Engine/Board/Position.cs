@@ -74,6 +74,24 @@ public sealed class Position
 
     public IEnumerable<(int square, byte piece)> EnumeratePieces() => _board.Enumerate();
 
+    public string ToFen()
+    {
+        var info = new FenPositionInfo();
+        for (int i = 0; i < 64; i++)
+        {
+            info.Squares[i] = _board.Get(i);
+        }
+        info.SideToMove = SideToMove;
+        info.WhiteCastleKingside = WhiteCanCastleKingside;
+        info.WhiteCastleQueenside = WhiteCanCastleQueenside;
+        info.BlackCastleKingside = BlackCanCastleKingside;
+        info.BlackCastleQueenside = BlackCanCastleQueenside;
+        info.EnPassantSquare = EnPassantSquare;
+        info.HalfmoveClock = HalfmoveClock;
+        info.FullmoveNumber = FullmoveNumber;
+        return Fen.Format(info);
+    }
+
     public void MakeMove(Move move)
     {
         #region Info about move
